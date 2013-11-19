@@ -1,0 +1,3 @@
+thrift_line
+*.o
+libline.so
