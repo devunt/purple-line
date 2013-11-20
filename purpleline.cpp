@@ -50,6 +50,9 @@ void PurpleLine::login() {
     client_in = boost::make_shared<line::LineClient>(
         boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_in));
 
+    purple_connection_set_state(conn, PURPLE_CONNECTING);
+    purple_connection_update_progress(conn, "Connecting", 0, 2);
+
     // Log in
 
     client_out->send_loginWithIdentityCredentialForCertificate(
@@ -90,6 +93,9 @@ void PurpleLine::get_profile() {
             << "  Picture status name: " << profile.pictureStatus << std::endl
             << "  Thumbnail URL: " << profile.thumbnailUrl << std::endl
             << "  Status message: " << profile.statusMessage << std::endl;
+
+        purple_connection_set_state(conn, PURPLE_CONNECTED);
+        purple_connection_update_progress(conn, "Connected", 1, 2);
 
         get_contacts();
     });
@@ -136,9 +142,7 @@ void PurpleLine::get_contacts() {
                         purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
                         NULL);
 
-                    //purple_blist_alias_contact(PURPLE_CONTACT(buddy), c.displayName.c_str());
-
-                    std::cout << " added " << std::endl;
+                    //purple_blist_alias_buddy(buddy, c.displayName.c_str());
                 }
             }
 
@@ -163,6 +167,13 @@ void PurpleLine::get_groups() {
             for (line::Group &g: groups) {
                 if (!group)
                     group = purple_group_new("LINE");
+
+                //GHashTable *components = g_hash_table_new(g_str_hash, g_str_equal);
+                //g_hash_table_insert(components, (gpointer)"id", (gpointer)g_strdup(g.id.c_str()));
+
+                //PurpleChat *chat = purple_chat_new(acct, g.name.c_str(), components);
+
+                //purple_blist_add_chat(chat, group, NULL);
 
                 std::cout << "Group " << g.id << std::endl
                     << "  Name: " << g.name << std::endl
