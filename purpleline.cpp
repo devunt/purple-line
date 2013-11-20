@@ -16,7 +16,7 @@ static const int LINE_PORT = 443;
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct)
     : conn(conn), acct(acct)
 {
-    purple_debug_info("lineprpl", "constructed");
+
 }
 
 const char *PurpleLine::list_icon(PurpleBuddy *buddy)
@@ -28,20 +28,10 @@ GList *PurpleLine::status_types() {
     GList *types = NULL;
     PurpleStatusType *t;
 
-    purple_debug_info("lineprpl", "status_types");
-
-    t = purple_status_type_new(
-        PURPLE_STATUS_AVAILABLE,
-        "online",
-        "Online",
-        TRUE);
+    t = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, NULL, NULL, TRUE, TRUE, FALSE);
     types = g_list_append(types, t);
 
-    t = purple_status_type_new(
-        PURPLE_STATUS_OFFLINE,
-        "offline",
-        "Offline",
-        TRUE);
+    t = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, NULL, NULL, TRUE, TRUE, FALSE);
     types = g_list_append(types, t);
 
     return types;
@@ -70,32 +60,117 @@ void PurpleLine::login() {
         "libpurple",
         line::IdentityProvider::LINE,
         "");
+    http_out->send([this](int status) {
+        if (status != 200) {
+            purple_debug_warning("line", "Login status: %d", status);
+            close();
+            return;
+        }
 
-    http_out->send(std::bind(&PurpleLine::login_complete, this, std::placeholders::_1));
+        line::LoginResult result;
+        client_out->recv_loginWithIdentityCredentialForCertificate(result);
+
+        http_out->set_auth_token(result.authToken);
+        http_in->set_auth_token(result.authToken);
+
+        get_profile();
+    });
 }
 
-void PurpleLine::login_complete(int status) {
-    if (status != 200) {
-        close();
-        return;
-    }
-
-    line::LoginResult result;
-    client_out->recv_loginWithIdentityCredentialForCertificate(result);
-
-    http_out->set_auth_token(result.authToken);
-    http_in->set_auth_token(result.authToken);
-
+void PurpleLine::get_profile() {
     client_out->send_getProfile();
+    http_out->send([this](int status) {
+        line::Profile profile;
+        client_out->recv_getProfile(profile);
 
-    http_out->send(std::bind(&PurpleLine::get_profile_complete, this, std::placeholders::_1));
+        std::cout << "Your profile: " << std::endl
+            << "  ID: " << profile.mid << std::endl
+            << "  Display name: " << profile.displayName << std::endl
+            << "  Phonetic name: " << profile.phoneticName << std::endl
+            << "  Picture status name: " << profile.pictureStatus << std::endl
+            << "  Thumbnail URL: " << profile.thumbnailUrl << std::endl
+            << "  Status message: " << profile.statusMessage << std::endl;
+
+        get_contacts();
+    });
 }
 
-void PurpleLine::get_profile_complete(int status) {
-    line::Profile profile;
-    client_out->recv_getProfile(profile);
+void PurpleLine::get_contacts() {
+    client_out->send_getAllContactIds();
+    http_out->send([this](int status) {
+        std::vector<std::string> ids;
+        client_out->recv_getAllContactIds(ids);
 
-    std::cout << "mid: " << profile.mid << " email: " << profile.email << " userid: " << profile.userid << std::endl;
+        client_out->send_getContacts(ids);
+        http_out->send([this](int status) {
+            std::vector<line::Contact> contacts;
+            client_out->recv_getContacts(contacts);
+
+            PurpleGroup *group = purple_find_group("LINE");
+
+            for (line::Contact &c: contacts) {
+
+                std::cout << "Contact " << c.mid << std::endl
+                    //<< "  Type: " << line::_ContactType_VALUES_TO_NAMES.at(c.type) << std::endl
+                    << "  Status: " << line::_ContactStatus_VALUES_TO_NAMES.at(c.status) << std::endl
+                    //<< "  Relation: " << line::_ContactRelation_VALUES_TO_NAMES.at(c.relation) << std::endl
+                    << "  Display name: " << c.displayName << std::endl
+                    << "  Phonetic name: " << c.phoneticName << std::endl
+                    << "  Picture status name: " << c.pictureStatus << std::endl
+                    << "  Thumbnail URL: " << c.thumbnailUrl << std::endl
+                    << "  Status message: " << c.statusMessage << std::endl;
+
+                if (c.status == line::ContactStatus::FRIEND) {
+                    if (!group)
+                        group = purple_group_new("LINE");
+
+                    PurpleBuddy *buddy = purple_find_buddy(acct, c.mid.c_str());
+                    if (!buddy) {
+                        buddy = purple_buddy_new(acct, c.mid.c_str(), c.displayName.c_str());
+                        purple_blist_add_buddy(buddy, NULL, group, NULL);
+                    }
+
+                    purple_prpl_got_user_status(
+                        acct,
+                        c.mid.c_str(),
+                        purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
+                        NULL);
+
+                    //purple_blist_alias_contact(PURPLE_CONTACT(buddy), c.displayName.c_str());
+
+                    std::cout << " added " << std::endl;
+                }
+            }
+
+            get_groups();
+        });
+    });
+}
+
+void PurpleLine::get_groups() {
+    client_out->send_getGroupIdsJoined();
+    http_out->send([this](int status) {
+        std::vector<std::string> ids;
+        client_out->recv_getGroupIdsJoined(ids);
+
+        client_out->send_getGroups(ids);
+        http_out->send([this](int status) {
+            std::vector<line::Group> groups;
+            client_out->recv_getGroups(groups);
+
+            PurpleGroup *group = purple_find_group("LINE");
+
+            for (line::Group &g: groups) {
+                if (!group)
+                    group = purple_group_new("LINE");
+
+                std::cout << "Group " << g.id << std::endl
+                    << "  Name: " << g.name << std::endl
+                    << "  Creator: " << g.creator.displayName << std::endl
+                    << "  Member count: " << g.members.size() << std::endl;
+            }
+        });
+    });
 }
 
 void PurpleLine::close() {

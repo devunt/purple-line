@@ -36,7 +36,9 @@ public:
 
 private:
 
-    void login_complete(int status);
-    void get_profile_complete(int status);
+    // Login process methods, executed in this order.
+    void get_profile();
+    void get_contacts();
+    void get_groups();
 
 };

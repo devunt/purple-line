@@ -19,6 +19,7 @@ PurpleHttpClient::PurpleHttpClient(
     auth_token("Not Authenticated"),
     connected(false),
     in_progress(false),
+    ssl(NULL),
     status_code(-1),
     content_length(-1)
 {
@@ -70,18 +71,18 @@ void PurpleHttpClient::send(std::function<void(int)> callback) {
 
     std::ostringstream data;
 
-    data <<
-        "POST " << path << " HTTP/1.1" "\r\n"
-        "Host: " << host << "\r\n"
-        "Connection: Keep-alive" << host << "\r\n" <<
-        "Content-Type: application/x-thrift" "\r\n" <<
-        "Content-Length: " << request_str.size() << "\r\n" <<
-        "Accept: application/x-thrift" "\r\n" <<
-        "User-Agent: purple-line (LINE for libpurple)" "\r\n" <<
-        "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n" <<
-        "X-Line-Access: " << auth_token << "\r\n" <<
-        "\r\n" <<
-        request_str;
+    data
+        << "POST " << path << " HTTP/1.1" "\r\n"
+        << "Host: " << host << "\r\n"
+        << "Connection: Keep-alive" << host << "\r\n"
+        << "Content-Type: application/x-thrift" "\r\n"
+        << "Content-Length: " << request_str.size() << "\r\n"
+        << "Accept: application/x-thrift" "\r\n"
+        << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
+        << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
+        << "X-Line-Access: " << auth_token << "\r\n"
+        << "\r\n"
+        << request_str;
 
     Request req;
     req.data = data.str();

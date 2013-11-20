@@ -26,7 +26,7 @@ struct Location {
 enum MessageToType {
     USER = 0;
     ROOM = 1;
-    GROUP = 3,
+    GROUP = 3;
 }
 
 // eo.class
@@ -120,6 +120,65 @@ struct Profile {
     32: bool allowSearchByEmail;
 }
 
+// en.class
+enum ContactType {
+    MID = 0;
+    PHONE = 1;
+    EMAIL = 2;
+    USERID = 3;
+    PROXIMITY = 4;
+    GROUP = 5;
+    USER = 6;
+    QRCODE = 7;
+    PROMOTION_BOT = 8;
+}
+
+// em.class
+enum ContactStatus {
+    UNSPECIFIED = 0;
+    FRIEND = 1;
+    FRIEND_BLOCKED = 2;
+    RECOMMEND = 3;
+    RECOMMEND_BLOCKED = 4;
+}
+
+enum ContactRelation {
+    ONEWAY = 0;
+    BOTH = 1;
+    NOT_REGISTERED = 2;
+}
+
+// ef.class
+struct Contact {
+    1: string mid;
+    2: i64 createdTime;
+    10: ContactType type;
+    11: ContactStatus status;
+    21: ContactRelation relation;
+    22: string displayName;
+    23: string phoneticName;
+    24: string pictureStatus;
+    25: string thumbnailUrl;
+    26: string statusMessage;
+    31: bool capableVoiceCall;
+    32: bool capableVideoCall;
+    33: bool capableMyhome;
+    34: bool capableBuddy;
+    35: i32 attributes;
+    36: i64 settings;
+}
+
+// et.class
+struct Group {
+    1: string id;
+    2: i64 createdTime;
+    10: string name;
+    11: string pictureStatus;
+    20: list<Contact> members;
+    21: Contact creator;
+    22: list<Contact> invitee;
+}
+
 // jt.class
 service Line {
     // Gets authentication key
@@ -137,13 +196,28 @@ service Line {
     //    4: string password,
     //    8: IdentityProvider identityProvider)
 
+    // Gets current user's profile
     Profile getProfile();
 
-    // Sends a message to chat or user
-    Message sendMessage(1: i32 seq, 2: Message message);
+    // Gets list of current user's contact IDs
+    list<string> getAllContactIds();
+
+    // Gets list of current user's recommended contacts IDs
+    list<string> getRecommendationIds();
+
+    // Gets detailed information on contacts
+    list<Contact> getContacts(2: list<string> ids);
+
+    // Gets list of current user's joined groups
+    list<string> getGroupIdsJoined();
+
+    list<Group> getGroups(2: list<string> ids);
 
     // Returns incoming events
     list<Operation> fetchOperations(2: i64 localRev, 3: i32 count);
+
+    // Sends a message to chat or user
+    Message sendMessage(1: i32 seq, 2: Message message);
 
     // Probably sends "message read" notification
     // sendChatChecked
