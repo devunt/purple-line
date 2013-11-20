@@ -7,7 +7,7 @@ LIBS = `pkg-config --libs purple thrift glib openssl`
 
 MAIN = libline.so
 
-CPP_SRCS = purpleline.cpp wrappers.cpp \
+CPP_SRCS = purplehttpclient.cpp purpleline.cpp wrappers.cpp \
 	thrift_line/line_constants.cpp thrift_line/line_types.cpp thrift_line/Line.cpp
 C_SRCS = pluginmain.c
 
@@ -20,7 +20,7 @@ $(MAIN): thrift $(CPP_OBJS) $(C_OBJS)
 	$(CC) $(CFLAGS) $(LIBS) -o $(MAIN) $(CPP_OBJS) $(C_OBJS)
 
 .cpp.o:
-	$(CPP) $(CFLAGS) -c $< -o $@
+	$(CPP) $(CFLAGS) -std=c++0x -c $< -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@

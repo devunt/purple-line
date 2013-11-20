@@ -91,17 +91,33 @@ struct Operation {
 }
 
 enum IdentityProvider {
-    UNKNOWN = 0,
-    LINE = 1,
-    NAVER_KR = 2,
+    UNKNOWN = 0;
+    LINE = 1;
+    NAVER_KR = 2;
 }
 
 struct LoginResult {
-    1: string authToken,
-    // 2: certificate,
-    // 3: verifier
-    // 4: pinCode
-    5: i32 type,
+    1: string authToken;
+    // 2: certificate;
+    // 3: verifier;
+    // 4: pinCode;
+    5: i32 type;
+}
+
+// gg.class
+struct Profile {
+    1: string mid;
+    3: string userid;
+    10: string phone;
+    11: string email;
+    12: string regionCode;
+    20: string displayName;
+    21: string phoneticName;
+    22: string pictureStatus;
+    23: string thumbnailUrl;
+    24: string statusMessage;
+    31: bool allowSearchByUserid;
+    32: bool allowSearchByEmail;
 }
 
 // jt.class
@@ -116,10 +132,12 @@ service Line {
         8: IdentityProvider identityProvider,
         9: string certificate)
 
-    void verifyIdentityCredential(
-        3: string identifier,
-        4: string password,
-        8: IdentityProvider identityProvider)
+    //void verifyIdentityCredential(
+    //    3: string identifier,
+    //    4: string password,
+    //    8: IdentityProvider identityProvider)
+
+    Profile getProfile();
 
     // Sends a message to chat or user
     Message sendMessage(1: i32 seq, 2: Message message);
