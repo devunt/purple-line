@@ -18,15 +18,28 @@ static const char *LINE_GROUP = "LINE";
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct)
     : conn(conn), acct(acct)
 {
+    http_out = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/S4");
 
+    client_out = boost::make_shared<line::LineClient>(
+        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_out));
+
+    http_in = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/P4");
+
+    client_in = boost::make_shared<line::LineClient>(
+        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_in));
 }
 
-const char *PurpleLine::list_icon(PurpleBuddy *buddy)
+PurpleLine::~PurpleLine() {
+    http_out->close();
+    http_in->close();
+}
+
+const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *)
 {
     return "line";
 }
 
-GList *PurpleLine::status_types() {
+GList *PurpleLine::status_types(PurpleAccount *) {
     GList *types = NULL;
     PurpleStatusType *t;
 
@@ -45,31 +58,30 @@ static struct proto_chat_entry id_chat_entry {
     .required = TRUE,
 };
 
-GList *PurpleLine::chat_info() {
-    return g_list_append(NULL, g_memdup(&id_chat_entry, sizeof(struct proto_chat_entry)));
-}
-
 char *PurpleLine::get_chat_name(GHashTable *components) {
     return (char *)g_hash_table_lookup(components, (gconstpointer)"id");
 }
 
-void PurpleLine::login() {
-    // Create http clients
+void PurpleLine::login(PurpleAccount *acct) {
+    PurpleConnection *conn = purple_account_get_connection(acct);
 
-    http_out = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/S4");
+    PurpleLine *plugin = new PurpleLine(conn, acct);
+    conn->proto_data = (void *)plugin;
 
-    client_out = boost::make_shared<line::LineClient>(
-        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_out));
+    plugin->start_login();
+}
 
-    http_in = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/P4");
+void PurpleLine::close() {
+    delete this;
+}
 
-    client_in = boost::make_shared<line::LineClient>(
-        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_in));
+GList *PurpleLine::chat_info() {
+    return g_list_append(NULL, g_memdup(&id_chat_entry, sizeof(struct proto_chat_entry)));
+}
 
+void PurpleLine::start_login() {
     purple_connection_set_state(conn, PURPLE_CONNECTING);
     purple_connection_update_progress(conn, "Connecting", 0, 2);
-
-    // Log in
 
     client_out->send_loginWithIdentityCredentialForCertificate(
         purple_account_get_username(acct),
@@ -97,13 +109,6 @@ void PurpleLine::login() {
 
         get_last_op_revision();
     });
-}
-
-void PurpleLine::close() {
-    purple_debug_info("lineprpl", "close");
-
-    http_out->close();
-    http_in->close();
 }
 
 void PurpleLine::get_last_op_revision() {

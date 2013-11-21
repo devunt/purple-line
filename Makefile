@@ -1,4 +1,3 @@
-CC = gcc
 CPP = g++
 CFLAGS = -g -Wall -shared -fPIC \
 	-DHAVE_INTTYPES_H -DHAVE_CONFIG_H -DPURPLE_PLUGINS \
@@ -7,25 +6,20 @@ LIBS = `pkg-config --libs purple thrift glib`
 
 MAIN = libline.so
 
-CPP_SRCS = purplehttpclient.cpp purpleline.cpp wrappers.cpp \
+SRCS = pluginmain.cpp purplehttpclient.cpp purpleline.cpp \
 	thrift_line/line_constants.cpp thrift_line/line_types.cpp thrift_line/Line.cpp
-C_SRCS = pluginmain.c
 
-CPP_OBJS = $(CPP_SRCS:.cpp=.o)
-C_OBJS = $(C_SRCS:.c=.o)
+OBJS = $(SRCS:.cpp=.o)
 
 all: $(MAIN)
 
-$(MAIN): thrift $(CPP_OBJS) $(C_OBJS)
-	$(CC) $(CFLAGS) $(LIBS) -o $(MAIN) $(CPP_OBJS) $(C_OBJS)
+$(MAIN): thrift_line $(OBJS)
+	$(CPP) $(CFLAGS) $(LIBS) -o $(MAIN) $(OBJS)
 
 .cpp.o:
 	$(CPP) $(CFLAGS) -std=c++0x -c $< -o $@
 
-.c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
-
-thrift: line.thrift
+thrift_line: line.thrift
 	mkdir -p thrift_line
 	thrift -out thrift_line --gen cpp line.thrift
 

@@ -35,20 +35,21 @@ class PurpleLine {
 public:
 
     PurpleLine(PurpleConnection *conn, PurpleAccount *acct);
+    ~PurpleLine();
 
-    static const char *list_icon(PurpleBuddy *buddy);
-    static GList *status_types();
-    static GList *chat_info();
+    static const char *list_icon(PurpleAccount *, PurpleBuddy *buddy);
+    static GList *status_types(PurpleAccount *);
     static char *get_chat_name(GHashTable *components);
+    static void login(PurpleAccount *acct);
 
-    void login();
     void close();
-
+    GList *chat_info();
     int send_im(const char *who, const char *message, PurpleMessageFlags flags);
 
 private:
 
     // Login process methods, executed in this order.
+    void start_login();
     void get_last_op_revision();
     void get_profile();
     void get_contacts();
