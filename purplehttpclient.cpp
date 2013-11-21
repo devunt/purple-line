@@ -16,16 +16,21 @@ PurpleHttpClient::PurpleHttpClient(
     host(host),
     port(port),
     path(path),
-    auth_token("Not Authenticated"),
-    connected(false),
-    in_progress(false),
+    auth_token("x"),
     ssl(NULL),
+    connection_id(0),
+    first_request(true),
+    in_progress(false),
     status_code(-1),
     content_length(-1)
 {
 }
 
 PurpleHttpClient::~PurpleHttpClient() { }
+
+void PurpleHttpClient::set_path(std::string path) {
+    this->path = path;
+}
 
 void PurpleHttpClient::set_auth_token(std::string token) {
     this->auth_token = token;
@@ -43,6 +48,11 @@ void PurpleHttpClient::open() {
     if (ssl)
         return;
 
+    purple_debug_info("line", "Connecting...\n");
+
+    first_request = true;
+
+    connection_id++;
     ssl = purple_ssl_connect(
         acct,
         host.c_str(),
@@ -53,9 +63,16 @@ void PurpleHttpClient::open() {
 }
 
 void PurpleHttpClient::close() {
+    if (!ssl)
+        return;
+
     purple_ssl_close(ssl);
     ssl = NULL;
-    in_progress = false;
+    connection_id++;
+
+    x_ls = "";
+
+    response_str = "";
 }
 
 uint32_t PurpleHttpClient::read_virt(uint8_t *buf, uint32_t len) {
@@ -73,14 +90,25 @@ void PurpleHttpClient::send(std::function<void(int)> callback) {
 
     data
         << "POST " << path << " HTTP/1.1" "\r\n"
-        << "Host: " << host << "\r\n"
-        << "Connection: Keep-alive" << host << "\r\n"
-        << "Content-Type: application/x-thrift" "\r\n"
-        << "Content-Length: " << request_str.size() << "\r\n"
-        << "Accept: application/x-thrift" "\r\n"
-        << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
-        << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
-        << "X-Line-Access: " << auth_token << "\r\n"
+        << "Content-Length: " << request_str.size() << "\r\n";
+
+    if (x_ls.size() > 0)
+        data << "X-LS: " << x_ls << "\r\n";
+
+    if (first_request) {
+        data
+            << "Connection: Keep-Alive" "\r\n"
+            << "Content-Type: application/x-thrift" "\r\n"
+            << "Host: " << host << ":" << port << "\r\n"
+            << "Accept: application/x-thrift" "\r\n"
+            << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
+            << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
+            << "X-Line-Access: " << auth_token << "\r\n";
+
+        first_request = false;
+    }
+
+    data
         << "\r\n"
         << request_str;
 
@@ -106,15 +134,16 @@ void PurpleHttpClient::send_next() {
         return;
     }
 
-    if (request_queue.empty())
+    if (in_progress || request_queue.empty())
         return;
 
-    if (!in_progress) {
-        Request &next_req = request_queue.front();
+    status_code = -1;
+    content_length = -1;
 
-        in_progress = true;
-        purple_ssl_write(ssl, next_req.data.c_str(), next_req.data.size());
-    }
+    Request &next_req = request_queue.front();
+
+    in_progress = true;
+    purple_ssl_write(ssl, next_req.data.c_str(), next_req.data.size());
 }
 
 static void wrap_ssl_input(gpointer data, PurpleSslConnection *ssl, PurpleInputCondition cond) {
@@ -122,9 +151,7 @@ static void wrap_ssl_input(gpointer data, PurpleSslConnection *ssl, PurpleInputC
 }
 
 void PurpleHttpClient::ssl_connect() {
-    purple_debug_warning("line", "Connected.");
-
-    connected = true;
+    purple_debug_info("line", "Connected.\n");
 
     purple_ssl_input_add(ssl, wrap_ssl_input, (gpointer)this);
 
@@ -142,9 +169,9 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
 
         if (count == 0) {
             if (any)
-                return;
+                break;
 
-            purple_debug_warning("line", "Server closed connection.");
+            purple_debug_warning("line", "Server closed connection.\n");
 
             for (Request &r: request_queue)
                 r.callback(-1);
@@ -152,11 +179,11 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
             request_queue.clear(); // TODO: Maybe add retry logic
 
             close();
-            return;
+            break;
         }
 
         if (count == (size_t)-1)
-            return;
+            break;
 
         any = true;
 
@@ -168,12 +195,15 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
             response_buf.str(response_str.substr(0, content_length));
             response_str.erase(0, content_length);
 
+            int connection_id_before = connection_id;
+
             request_queue.front().callback(status_code);
             request_queue.pop_front();
 
-            status_code = -1;
-            content_length = -1;
             in_progress = false;
+
+            if (connection_id != connection_id_before)
+                break; // Callback closed connection, don't try to continue reading
 
             send_next();
         }
@@ -181,7 +211,7 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
 }
 
 void PurpleHttpClient::ssl_error(PurpleSslErrorType err) {
-    purple_debug_warning("line", "SSL error: %s", purple_ssl_strerror(err));
+    purple_debug_warning("line", "SSL error: %s\n", purple_ssl_strerror(err));
 }
 
 void PurpleHttpClient::try_parse_response_header() {
@@ -192,7 +222,7 @@ void PurpleHttpClient::try_parse_response_header() {
     std::istringstream stream(response_str.substr(0, header_end));
 
     stream.ignore(256, ' ');
-    stream >> status_code; // HTTP/1.1 200 OK
+    stream >> status_code;
     stream.ignore(256, '\n');
 
     while (stream) {
@@ -203,6 +233,9 @@ void PurpleHttpClient::try_parse_response_header() {
 
         if (name == "Content-Length")
             stream >> content_length;
+
+        if (name == "X-LS")
+            std::getline(stream, x_ls, '\r');
 
         stream.ignore(256, '\n');
     }

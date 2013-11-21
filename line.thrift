@@ -1,5 +1,7 @@
 namespace cpp line
 
+// :%s/.*"\([^"]*\)", \d\+, \(\d\+\).*/\1 = \2;/
+
 // er.class
 enum ErrorCode {
     ILLEGAL_ARGUMENT = 0;
@@ -30,7 +32,7 @@ enum MessageToType {
 }
 
 // eo.class
-enum MessageContentType {
+enum ContentType {
     NONE = 0;
     IMAGE = 1;
     VIDEO = 2;
@@ -47,27 +49,71 @@ enum MessageContentType {
 
 // fc.class
 struct Message {
-    1: string from_;
+    1: string from;
     2: string to;
     3: MessageToType toType;
     4: string id;
     5: i64 createdTime;
     6: i64 deliveredTime;
     10: string text;
-    11: Location location;
+    11: optional Location location;
     14: bool hasContent;
-    15: MessageContentType contentType;
+    15: ContentType contentType;
     17: string contentPreview;
-    18: map<string, string> contentMetadata;
+    18: optional map<string, string> contentMetadata;
 }
 
 // fn.class
 enum OperationType {
+    END_OF_OPERATION = 0;
+    UPDATE_PROFILE = 1;
+    UPDATE_SETTINGS = 36;
+    NOTIFIED_UPDATE_PROFILE = 2;
+    REGISTER_USERID = 3;
+    ADD_CONTACT = 4;
+    NOTIFIED_ADD_CONTACT = 5;
+    BLOCK_CONTACT = 6;
+    UNBLOCK_CONTACT = 7;
+    NOTIFIED_RECOMMEND_CONTACT = 8;
+    CREATE_GROUP = 9;
+    UPDATE_GROUP = 10;
+    NOTIFIED_UPDATE_GROUP = 11;
+    INVITE_INTO_GROUP = 12;
+    NOTIFIED_INVITE_INTO_GROUP = 13;
+    CANCEL_INVITATION_GROUP = 31;
+    NOTIFIED_CANCEL_INVITATION_GROUP = 32;
+    LEAVE_GROUP = 14;
+    NOTIFIED_LEAVE_GROUP = 15;
+    ACCEPT_GROUP_INVITATION = 16;
+    NOTIFIED_ACCEPT_GROUP_INVITATION = 17;
+    REJECT_GROUP_INVITATION = 34;
+    NOTIFIED_REJECT_GROUP_INVITATION = 35;
+    KICKOUT_FROM_GROUP = 18;
+    NOTIFIED_KICKOUT_FROM_GROUP = 19;
+    CREATE_ROOM = 20;
+    INVITE_INTO_ROOM = 21;
+    NOTIFIED_INVITE_INTO_ROOM = 22;
+    LEAVE_ROOM = 23;
+    NOTIFIED_LEAVE_ROOM = 24;
     SEND_MESSAGE = 25;
     RECEIVE_MESSAGE = 26;
     SEND_MESSAGE_RECEIPT = 27;
     RECEIVE_MESSAGE_RECEIPT = 28;
+    SEND_CONTENT_RECEIPT = 29;
     SEND_CHAT_CHECKED = 40;
+    SEND_CHAT_REMOVED = 41;
+    RECEIVE_ANNOUNCEMENT = 30;
+    INVITE_VIA_EMAIL = 38;
+    NOTIFIED_REGISTER_USER = 37;
+    NOTIFIED_UNREGISTER_USER = 33;
+    NOTIFIED_REQUEST_RECOVERY = 39;
+    NOTIFIED_FORCE_SYNC = 42;
+    SEND_CONTENT = 43;
+    SEND_MESSAGE_MYHOME = 44;
+    NOTIFIED_UPDATE_CONTENT_PREVIEW = 45;
+    REMOVE_ALL_MESSAGES = 46;
+    NOTIFIED_UPDATE_PURCHASES = 47;
+    DUMMY = 48;
 }
 
 // fm.class
@@ -215,6 +261,9 @@ service Line {
 
     // Returns incoming events
     list<Operation> fetchOperations(2: i64 localRev, 3: i32 count);
+
+    // Returns current revision ID for use with fetchOperations
+    i64 getLastOpRevision();
 
     // Sends a message to chat or user
     Message sendMessage(1: i32 seq, 2: Message message);

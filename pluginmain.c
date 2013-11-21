@@ -21,11 +21,16 @@ static PurplePluginProtocolInfo prpl_info = {
         .max_filesize = 10000,
         .scale_rules = PURPLE_ICON_SCALE_DISPLAY,
     },
-    .icon_spec = NO_BUDDY_ICONS,
+    //.icon_spec = NO_BUDDY_ICONS,
+
+    .list_icon = line_list_icon,
     .status_types = line_status_types,
+    .chat_info = line_chat_info,
+    .get_chat_name = line_get_chat_name,
     .login = line_login,
     .close = line_close,
-    .list_icon = line_list_icon,
+    .send_im = line_send_im,
+
     .struct_size = sizeof(PurplePluginProtocolInfo),
 };
 
@@ -46,7 +51,7 @@ static PurplePluginInfo info = {
     .summary = "Plugin for Naver LINE",
     .description = "Plugin for Naver LINE",
     .author = "Matti Virkkunen <mvirkkunen@gmail.com>",
-    .homepage = "http://line.naver.jp/en/",
+    .homepage = "https://github.com/mvirkkunen/purple-line",
 
     .destroy = lineprpl_destroy,
     .extra_info = (void *)&prpl_info,

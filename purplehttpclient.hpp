@@ -28,9 +28,11 @@ class PurpleHttpClient : public apache::thrift::transport::TTransport {
     uint16_t port;
     std::string path;
     std::string auth_token;
+    std::string x_ls;
 
     PurpleSslConnection *ssl;
-    bool connected;
+    int connection_id;
+    bool first_request;
 
     uint8_t buf[BUFFER_SIZE];
 
@@ -49,6 +51,7 @@ public:
     PurpleHttpClient(PurpleAccount *acct, std::string host, uint16_t port, std::string path);
     ~PurpleHttpClient();
 
+    void set_path(std::string path);
     void set_auth_token(std::string token);
 
     virtual void open();

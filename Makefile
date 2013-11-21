@@ -1,9 +1,9 @@
 CC = gcc
 CPP = g++
-CFLAGS = -Wall -shared -fPIC \
+CFLAGS = -g -Wall -shared -fPIC \
 	-DHAVE_INTTYPES_H -DHAVE_CONFIG_H -DPURPLE_PLUGINS \
-	`pkg-config --cflags purple thrift glib openssl`
-LIBS = `pkg-config --libs purple thrift glib openssl`
+	`pkg-config --cflags purple thrift glib`
+LIBS = `pkg-config --libs purple thrift glib`
 
 MAIN = libline.so
 
@@ -32,7 +32,7 @@ thrift: line.thrift
 clean:
 	rm -f $(MAIN)
 	rm -f *.o
-	rm -rf thrift
+	rm -rf thrift_line
 
 # TODO: Make proper install target
 install:

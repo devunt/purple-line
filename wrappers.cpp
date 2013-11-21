@@ -19,6 +19,14 @@ GList *line_status_types(PurpleAccount *acct) {
     return PurpleLine::status_types();
 }
 
+GList *line_chat_info(PurpleConnection *conn) {
+    return PurpleLine::chat_info();
+};
+
+char *line_get_chat_name(GHashTable *components) {
+    return PurpleLine::get_chat_name(components);
+}
+
 void line_login(PurpleAccount *acct) {
     PurpleConnection *conn = purple_account_get_connection(acct);
 
@@ -34,4 +42,10 @@ void line_close(PurpleConnection *conn) {
     plugin->close();
 
     delete plugin;
+}
+
+
+int line_send_im(PurpleConnection *conn, const char *who, const char *message, PurpleMessageFlags flags) {
+    PurpleLine *plugin = (PurpleLine *)conn->proto_data;
+    return plugin->send_im(who, message, flags);
 }
