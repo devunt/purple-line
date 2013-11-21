@@ -17,10 +17,19 @@ To do
 -----
 
 * Synchronizing groups
-* Group chats
-* Synchronizing things while connected
-* Joining/leaving groups
+* Talking in groups
+* Group member list
+* Synchronizing things on the fly
+* Adding/removing/blocking friends
 * Inviting people to groups
+* Joining/leaving groups
 * Fetching recent messages when opening a conversation
-* "Show more history" button (if doable)
-* Other message types (stickers, images, etc)
+* Sending/receiving "message read" notifications
+* Other message types
+  * Images: Thumbnail should be easy
+  * Stickers: Figure out how to fetch, display as image
+  * Locations: Display as link
+* Companion Pidgin plugin:
+  * "Show more history" button
+  * Enlarge images
+  * Maybe even play audio and video messages
