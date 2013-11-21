@@ -33,4 +33,12 @@ install:
 	mkdir -p ~/.purple/plugins
 	cp $(MAIN) ~/.purple/plugins
 
+depend: .depend
+
+.depend: $(SRCS)
+	rm -f ./.depend
+	$(CPP) $(CFLAGS) -MM $^>>./.depend;
+
+include .depend
+
 .PHONY: clean
