@@ -28,7 +28,7 @@ struct Location {
 enum MessageToType {
     USER = 0;
     ROOM = 1;
-    GROUP = 3;
+    GROUP = 2;
 }
 
 // eo.class
@@ -258,6 +258,9 @@ service Line {
     list<string> getGroupIdsJoined();
 
     list<Group> getGroups(2: list<string> ids);
+
+    // Get recent messages from a group chat (n.b. arg names guessed)
+    list<Message> getRecentMessages(2: string gid, 3: i32 count);
 
     // Returns incoming events
     list<Operation> fetchOperations(2: i64 localRev, 3: i32 count);

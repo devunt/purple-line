@@ -30,7 +30,13 @@ class PurpleLine {
     line::Profile profile;
     int64_t local_rev;
 
+    int next_id;
+    std::map<int, std::string> chat_purple_id_to_id;
+    std::map<std::string, int> chat_id_to_purple_id;
+
     std::deque<std::string> recent_messages;
+
+    std::map<std::string, line::Group> group_map;
 
 public:
 
@@ -45,8 +51,12 @@ public:
     void close();
     GList *chat_info();
     int send_im(const char *who, const char *message, PurpleMessageFlags flags);
+    void join_chat(GHashTable *components);
+    int chat_send(int id, const char *message, PurpleMessageFlags flags);
 
 private:
+
+    PurpleChat *find_chat_by_id(std::string id);
 
     // Login process methods, executed in this order.
     void start_login();
@@ -57,7 +67,10 @@ private:
 
     // Long poll return channel
     void fetch_operations();
-    void handle_message(line::Message &msg, bool sent);
+    void handle_message(line::Message &msg, bool sent, bool replay);
+
+    void ensure_buddy_exists(std::string uid, std::string displayName);
+    void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
     void push_recent_message(std::string id);
 

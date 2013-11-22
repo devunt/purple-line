@@ -13,7 +13,7 @@ OBJS = $(SRCS:.cpp=.o)
 
 all: $(MAIN)
 
-$(MAIN): thrift_line $(OBJS)
+$(MAIN): $(OBJS)
 	$(CPP) $(CFLAGS) $(LIBS) -o $(MAIN) $(OBJS)
 
 .cpp.o:
@@ -35,10 +35,10 @@ install:
 
 depend: .depend
 
-.depend: $(SRCS)
+.depend: thrift_line $(SRCS)
 	rm -f ./.depend
 	$(CPP) $(CFLAGS) -MM $^>>./.depend;
 
-include .depend
+-include .depend
 
 .PHONY: clean

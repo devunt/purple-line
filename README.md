@@ -12,13 +12,13 @@ Implemented
 * Fetching user profile
 * Initial friend list synchronization
 * Sending and receiving text IMs
+* Synchronizing groups
+* Talking in groups
+* Group member list
 
 To do
 -----
 
-* Synchronizing groups
-* Talking in groups
-* Group member list
 * Synchronizing things on the fly
 * Adding/removing/blocking friends
 * Inviting people to groups

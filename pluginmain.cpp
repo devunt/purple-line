@@ -67,11 +67,13 @@ static void init_prpl_info(PurplePluginProtocolInfo &i) {
 
     i.list_icon = &PurpleLine::list_icon;
     i.status_types = &PurpleLine::status_types;
-    i.get_chat_name = &PurpleLine::get_chat_name;
+    //i.get_chat_name = &PurpleLine::get_chat_name;
     i.login = &PurpleLine::login;
     i.close = WRAPPER(PurpleLine::close);
     i.chat_info = WRAPPER(PurpleLine::chat_info);
     i.send_im = WRAPPER(PurpleLine::send_im);
+    i.join_chat = WRAPPER(PurpleLine::join_chat);
+    i.chat_send = WRAPPER(PurpleLine::chat_send);
 
     i.struct_size = sizeof(PurplePluginProtocolInfo);
 }
