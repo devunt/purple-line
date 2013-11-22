@@ -36,8 +36,7 @@ install:
 depend: .depend
 
 .depend: thrift_line $(SRCS)
-	rm -f ./.depend
-	$(CPP) $(CFLAGS) -MM $^>>./.depend;
+	$(CPP) $(CFLAGS) -MM $(SRCS) >.depend
 
 -include .depend
 
