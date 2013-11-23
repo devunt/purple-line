@@ -6,10 +6,41 @@ namespace cpp line
 enum ErrorCode {
     ILLEGAL_ARGUMENT = 0;
     AUTHENTICATION_FAILED = 1;
+    DB_FAILED = 2;
+    INVALID_STATE = 3;
+    EXCESSIVE_ACCESS = 4;
+    NOT_FOUND = 5;
+    INVALID_MID = 9;
+    NOT_A_MEMBER = 10;
+    INVALID_LENGTH = 6;
+    NOT_AVAILABLE_USER = 7;
+    NOT_AUTHORIZED_DEVICE = 8;
+    NOT_AUTHORIZED_SESSION = 14;
+    INCOMPATIBLE_APP_VERSION = 11;
+    NOT_READY = 12;
+    NOT_AVAILABLE_SESSION = 13;
+    SYSTEM_ERROR = 15;
+    NO_AVAILABLE_VERIFICATION_METHOD = 16;
+    NOT_AUTHENTICATED = 17;
+    INVALID_IDENTITY_CREDENTIAL = 18;
+    NOT_AVAILABLE_IDENTITY_IDENTIFIER = 19;
+    INTERNAL_ERROR = 20;
+    NO_SUCH_IDENTITY_IDENFIER = 21;
+    DEACTIVATED_ACCOUNT_BOUND_TO_THIS_IDENTITY = 22;
+    ILLEGAL_IDENTITY_CREDENTIAL = 23;
+    UNKNOWN_CHANNEL = 24;
+    NO_SUCH_MESSAGE_BOX = 25;
+    NOT_AVAILABLE_MESSAGE_BOX = 26;
+    CHANNEL_DOES_NOT_MATCH = 27;
+    NOT_YOUR_MESSAGE = 28;
+    MESSAGE_DEFINED_ERROR = 29;
+    USER_CANNOT_ACCEPT_PRESENTS = 30;
+    USER_NOT_STICKER_OWNER = 32;
+    MAINTENANCE_ERROR = 33;
 }
 
 // jq.class
-struct Error {
+exception Error {
     1: ErrorCode code;
     2: string reason;
     3: map<string, string> parameterMap;
@@ -210,8 +241,8 @@ struct Contact {
     32: bool capableVideoCall;
     33: bool capableMyhome;
     34: bool capableBuddy;
-    35: i32 attributes;
-    36: i64 settings;
+    35: i32 attributes; // Bitfield? 32 = "official account"
+    36: i64 settings; // Bitfield? 4 = hidden
 }
 
 // et.class
@@ -235,7 +266,7 @@ service Line {
         6: string accessLocation,
         7: string systemName,
         8: IdentityProvider identityProvider,
-        9: string certificate)
+        9: string certificate) throws (1:Error e);
 
     //void verifyIdentityCredential(
     //    3: string identifier,
