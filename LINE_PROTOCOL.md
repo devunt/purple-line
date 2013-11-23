@@ -68,9 +68,9 @@ obtained via the login procedure.
 Object storage server
 ---------------------
 
-Message attachment files are stored on a separate server at os.line.naver.jp, which is internally
-referred to as the "object storage server". It serves files via HTTPS with the same authentication
-protocol as above.
+Message attachment files are stored on a separate server at https://os.line.naver.jp/ which is
+internally referred to as the "object storage server". It serves files via HTTPS with the same
+authentication protocol as above.
 
 Login procedure
 ---------------
@@ -100,44 +100,44 @@ After logging in the client sends out a sequence of requests to synchronize with
 seems some messages are not always sent - the client could be storing data locally somewhere and
 comparing with the revision ID from getLastOpRevision()
 
-(Not all methods are listed or implemented in Thrift yet)
+(Not all methods are listed or implemented in Thrift yet - also list is incomplete)
 
-getLastOpRevision()
+    getLastOpRevision()
 
 Gets the revision ID to use for the long poll return channel later. It's fetched first to ensure
 nothing is missed even if something happens during the sync procedure.
 
-getProfile()
+    getProfile()
 
 Gets the currently logged in user's profile, which includes their display name and status message
 and so forth.
 
-getBlockedContactIds()
+    getBlockedContactIds()
 
 List of blocked user IDs.
 
-getRecommendationIds()
+    getRecommendationIds()
 
 List of suggested friend IDs.
 
-getBlockedRecommendationIds()
+    getBlockedRecommendationIds()
 
 List of suggested friend IDs that have been dismissed (why can't the previous method just not
 return these...?)
 
-getAllContactIds()
+    getAllContactIds()
 
 Gets all contact IDs added as friends.
 
-getContacts(list<string> contactIds) - with IDs from the previous methods
+    getContacts(contactIds) - with IDs from the previous methods
 
 Gets details for the users.
 
-getGroupIdsJoined()
+    getGroupIdsJoined()
 
 Gets all groups current user is a member of.
 
-getGroups(list<string> groupIds) - with IDs from the previous method
+    getGroups(groupIds) - with IDs from the previous method
 
 Gets details for the groups. This included member lists.
 
@@ -198,7 +198,7 @@ http://dl-obs.official.line.naver.jp/r/talk/o/u3ae3691f73c7a396fb6e5243a8718915-
 Return channel
 --------------
 
-fetchOperations(localRev, count)
+    fetchOperations(localRev, count)
 
 For incoming messages, long polling with fetchOperations() to the /S4 path is used. A HTTP 410 Gone
 response signals a timed out poll, in which case a new request should be issued.
