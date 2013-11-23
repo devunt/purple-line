@@ -1,17 +1,10 @@
-#include "purpleline.hpp"
-
 #include <iostream>
-
-#include <protocol/TCompactProtocol.h>
 
 #include <conversation.h>
 #include <debug.h>
 #include <sslconn.h>
 
-#include "purplehttpclient.hpp"
-
-static const char *LINE_HOST = "gd2.line.naver.jp";
-static const int LINE_PORT = 443;
+#include "purpleline.hpp"
 
 static const char *LINE_GROUP = "LINE";
 static const char *LINE_TEMP_GROUP = "LINE Temporary Contacts";
@@ -25,20 +18,13 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     acct(acct),
     next_id(1)
 {
-    http_out = boost::make_shared<PurpleHttpClient>(acct, conn, LINE_HOST, LINE_PORT, "/S4");
-
-    client_out = boost::make_shared<line::LineClient>(
-        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_out));
-
-    http_in = boost::make_shared<PurpleHttpClient>(acct, conn, LINE_HOST, LINE_PORT, "/P4");
-
-    client_in = boost::make_shared<line::LineClient>(
-        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_in));
+    c_out = boost::make_shared<ThriftClient>(acct, conn, "/S4");
+    c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
 }
 
 PurpleLine::~PurpleLine() {
-    http_out->close();
-    http_in->close();
+    c_out->close();
+    c_in->close();
 }
 
 const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
@@ -111,7 +97,7 @@ void PurpleLine::start_login() {
     purple_connection_set_state(conn, PURPLE_CONNECTING);
     purple_connection_update_progress(conn, "Connecting", 0, 2);
 
-    client_out->send_loginWithIdentityCredentialForCertificate(
+    c_out->send_loginWithIdentityCredentialForCertificate(
         purple_account_get_username(acct),
         purple_account_get_password(acct),
         true,
@@ -119,23 +105,11 @@ void PurpleLine::start_login() {
         "libpurple",
         line::IdentityProvider::LINE,
         "");
-    http_out->send([this]() {
-        /*if (status != 200) {
-            purple_debug_warning("line", "Login status: %d", status);
-
-            purple_connection_error(
-                conn,
-
-                "Could not log in (bad HTTP status code)");
-
-            close();
-            return;
-        }*/
-
+    c_out->send([this]() {
         line::LoginResult result;
 
         try {
-            client_out->recv_loginWithIdentityCredentialForCertificate(result);
+            c_out->recv_loginWithIdentityCredentialForCertificate(result);
         } catch (line::Error &err) {
             std::string msg = "Could not log in. " + err.reason;
 
@@ -147,28 +121,28 @@ void PurpleLine::start_login() {
         }
 
         // Re-open output client to update persistent headers
-        http_out->close();
+        c_out->close();
 
-        http_out->set_auth_token(result.authToken);
-        http_in->set_auth_token(result.authToken);
+        c_out->set_auth_token(result.authToken);
+        c_in->set_auth_token(result.authToken);
 
         get_last_op_revision();
     });
 }
 
 void PurpleLine::get_last_op_revision() {
-    client_out->send_getLastOpRevision();
-    http_out->send([this]() {
-        local_rev = client_out->recv_getLastOpRevision();
+    c_out->send_getLastOpRevision();
+    c_out->send([this]() {
+        local_rev = c_out->recv_getLastOpRevision();
 
         get_profile();
     });
 }
 
 void PurpleLine::get_profile() {
-    client_out->send_getProfile();
-    http_out->send([this]() {
-        client_out->recv_getProfile(profile);
+    c_out->send_getProfile();
+    c_out->send([this]() {
+        c_out->recv_getProfile(profile);
 
         purple_account_set_alias(acct, profile.displayName.c_str());
 
@@ -186,15 +160,15 @@ void PurpleLine::get_profile() {
 }
 
 void PurpleLine::get_contacts() {
-    client_out->send_getAllContactIds();
-    http_out->send([this]() {
+    c_out->send_getAllContactIds();
+    c_out->send([this]() {
         std::vector<std::string> uids;
-        client_out->recv_getAllContactIds(uids);
+        c_out->recv_getAllContactIds(uids);
 
-        client_out->send_getContacts(uids);
-        http_out->send([this]() {
+        c_out->send_getContacts(uids);
+        c_out->send([this]() {
             std::vector<line::Contact> contacts;
-            client_out->recv_getContacts(contacts);
+            c_out->recv_getContacts(contacts);
 
             PurpleGroup *group = purple_find_group(LINE_GROUP);
 
@@ -249,15 +223,15 @@ void PurpleLine::get_contacts() {
 }
 
 void PurpleLine::get_groups() {
-    client_out->send_getGroupIdsJoined();
-    http_out->send([this]() {
+    c_out->send_getGroupIdsJoined();
+    c_out->send([this]() {
         std::vector<std::string> gids;
-        client_out->recv_getGroupIdsJoined(gids);
+        c_out->recv_getGroupIdsJoined(gids);
 
-        client_out->send_getGroups(gids);
-        http_out->send([this]() {
+        c_out->send_getGroups(gids);
+        c_out->send([this]() {
             std::vector<line::Group> groups;
-            client_out->recv_getGroups(groups);
+            c_out->recv_getGroups(groups);
 
             PurpleGroup *group = purple_find_group(LINE_GROUP);
 
@@ -298,9 +272,9 @@ void PurpleLine::get_groups() {
 }
 
 void PurpleLine::fetch_operations() {
-    client_in->send_fetchOperations(local_rev, 50);
-    http_in->send([this]() {
-        int status = http_in->status_code();
+    c_in->send_fetchOperations(local_rev, 50);
+    c_in->send([this]() {
+        int status = c_in->status_code();
 
         if (status == -1) {
             // Plugin closing
@@ -315,7 +289,7 @@ void PurpleLine::fetch_operations() {
         }
 
         std::vector<line::Operation> operations;
-        client_in->recv_fetchOperations(operations);
+        c_in->recv_fetchOperations(operations);
 
         for (line::Operation &op: operations) {
             switch (op.type) {
@@ -517,10 +491,10 @@ int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags
     msg.to = who;
     msg.text = message;
 
-    client_out->send_sendMessage(0, msg);
-    http_out->send([this]() {
+    c_out->send_sendMessage(0, msg);
+    c_out->send([this]() {
         line::Message msg_back;
-        client_out->recv_sendMessage(msg_back);
+        c_out->recv_sendMessage(msg_back);
 
         push_recent_message(msg_back.id);
     });
@@ -552,10 +526,10 @@ void PurpleLine::join_chat(GHashTable *components) {
 
     set_chat_participants(PURPLE_CONV_CHAT(conv), group_map[gid]);
 
-    client_out->send_getRecentMessages(gid, 20);
-    http_out->send([this, purple_id]() {
+    c_out->send_getRecentMessages(gid, 20);
+    c_out->send([this, purple_id]() {
         std::vector<line::Message> recent_msgs;
-        client_out->recv_getRecentMessages(recent_msgs);
+        c_out->recv_getRecentMessages(recent_msgs);
 
         PurpleConversation *conv = purple_find_chat(conn, purple_id);
         if (!conv) {
@@ -586,10 +560,10 @@ int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags)
     msg.to = gid;
     msg.text = message;
 
-    client_out->send_sendMessage(0, msg);
-    http_out->send([this]() {
+    c_out->send_sendMessage(0, msg);
+    c_out->send([this]() {
         line::Message msg_back;
-        client_out->recv_sendMessage(msg_back);
+        c_out->recv_sendMessage(msg_back);
     });
 
     return 1;
@@ -599,4 +573,38 @@ void PurpleLine::push_recent_message(std::string id) {
     recent_messages.push_back(id);
     if (recent_messages.size() > 50)
         recent_messages.pop_front();
+}
+
+ThriftProtocol::ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans)
+    : apache::thrift::protocol::TCompactProtocolT<LineHttpTransport>(trans)
+{
+}
+
+LineHttpTransport *ThriftProtocol::getTransport() {
+    return trans_;
+}
+
+ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
+    : line::LineClientT<ThriftProtocol>(
+        boost::make_shared<ThriftProtocol>(
+            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp"))),
+    path(path)
+{
+    http = piprot_->getTransport();
+}
+
+void ThriftClient::set_auth_token(std::string token) {
+    http->set_auth_token(token);
+}
+
+void ThriftClient::send(std::function<void()> callback) {
+    http->send(path, callback);
+}
+
+int ThriftClient::status_code() {
+    return http->status_code();
+}
+
+void ThriftClient::close() {
+    http->close();
 }

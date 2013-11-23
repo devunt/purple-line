@@ -5,7 +5,7 @@
 #include <connection.h>
 #include <sslconn.h>
 
-// Template magic to wrap instant methods as C function pointers
+// Template magic to wrap instance methods as C function pointers
 
 template<typename Sig, Sig F>
 struct wrapper_;

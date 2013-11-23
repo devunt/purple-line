@@ -14,7 +14,7 @@
 
 #include "wrapper.hpp"
 
-class PurpleHttpClient : public apache::thrift::transport::TTransport {
+class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     class Request {
     public:
@@ -30,7 +30,6 @@ class PurpleHttpClient : public apache::thrift::transport::TTransport {
 
     std::string host;
     uint16_t port;
-    std::string default_path;
     std::string auth_token;
     std::string x_ls;
 
@@ -53,11 +52,9 @@ class PurpleHttpClient : public apache::thrift::transport::TTransport {
 
 public:
 
-    PurpleHttpClient(PurpleAccount *acct, PurpleConnection *conn,
-        std::string host, uint16_t port, std::string default_path="");
-    ~PurpleHttpClient();
+    LineHttpTransport(PurpleAccount *acct, PurpleConnection *conn, std::string host);
+    ~LineHttpTransport();
 
-    void set_path(std::string path);
     void set_auth_token(std::string token);
 
     virtual void open();
@@ -66,7 +63,6 @@ public:
     virtual uint32_t read_virt(uint8_t *buf, uint32_t len);
     void write_virt(const uint8_t *buf, uint32_t len);
 
-    void send(std::function<void()> callback);
     void send(std::string path, std::function<void()> callback);
     int status_code();
     int content_length();

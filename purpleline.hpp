@@ -6,28 +6,28 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 
-#include "debug.h"
-#include "plugin.h"
-#include "prpl.h"
+#include <debug.h>
+#include <plugin.h>
+#include <prpl.h>
+
+#include <protocol/TCompactProtocol.h>
 
 #include "thrift_line/Line.h"
 #include "thrift_line/line_types.h"
 #include "thrift_line/line_constants.h"
 
-#include "purplehttpclient.hpp"
+#include "linehttptransport.hpp"
 
 #define LINEPRPL_ID "prpl-mvirkkunen-line"
 
-class PurpleLine {
+class ThriftClient;
 
-private:
+class PurpleLine {
 
     PurpleConnection *conn;
     PurpleAccount *acct;
 
-    boost::shared_ptr<PurpleHttpClient> http_in, http_out;
-
-    boost::shared_ptr<line::LineClient> client_in, client_out;
+    boost::shared_ptr<ThriftClient> c_out, c_in;
 
     line::Profile profile;
     int64_t local_rev;
@@ -60,7 +60,7 @@ private:
 
     PurpleChat *find_chat_by_id(std::string id);
 
-    // Login process methods, executed in this order.
+    // Login process methods, executed in this this order
     void start_login();
     void get_last_op_revision();
     void get_profile();
@@ -75,5 +75,32 @@ private:
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
     void push_recent_message(std::string id);
+
+};
+
+class ThriftProtocol : public apache::thrift::protocol::TCompactProtocolT<LineHttpTransport> {
+
+public:
+
+    ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans);
+
+    LineHttpTransport *getTransport();
+
+};
+
+class ThriftClient : public line::LineClientT<ThriftProtocol> {
+
+    std::string path;
+    LineHttpTransport *http;
+
+public:
+
+    ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path);
+
+    void set_auth_token(std::string token);
+    void send(std::function<void()> callback);
+
+    int status_code();
+    void close();
 
 };

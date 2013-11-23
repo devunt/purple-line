@@ -1,3 +1,5 @@
+// Naver LINE protocol interface file, desktop client version
+
 namespace cpp line
 
 // :%s/.*"\([^"]*\)", \d\+, \(\d\+\).*/\1 = \2;/
@@ -167,6 +169,7 @@ struct Operation {
     20: Message message;
 }
 
+// ew.class
 enum IdentityProvider {
     UNKNOWN = 0;
     LINE = 1;
@@ -235,7 +238,7 @@ struct Contact {
     22: string displayName;
     23: string phoneticName;
     24: string pictureStatus;
-    25: string thumbnailUrl;
+    //25: string thumbnailUrl; // This is probably an old field.
     26: string statusMessage;
     31: bool capableVoiceCall;
     32: bool capableVideoCall;
@@ -243,6 +246,7 @@ struct Contact {
     34: bool capableBuddy;
     35: i32 attributes; // Bitfield? 32 = "official account"
     36: i64 settings; // Bitfield? 4 = hidden
+    37: string thumbnailUrl;
 }
 
 // et.class
@@ -266,12 +270,7 @@ service Line {
         6: string accessLocation,
         7: string systemName,
         8: IdentityProvider identityProvider,
-        9: string certificate) throws (1:Error e);
-
-    //void verifyIdentityCredential(
-    //    3: string identifier,
-    //    4: string password,
-    //    8: IdentityProvider identityProvider)
+        9: string certificate) throws (1: Error e);
 
     // Gets current user's profile
     Profile getProfile();
@@ -301,7 +300,4 @@ service Line {
 
     // Sends a message to chat or user
     Message sendMessage(1: i32 seq, 2: Message message);
-
-    // Probably sends "message read" notification
-    // sendChatChecked
 }

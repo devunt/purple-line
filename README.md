@@ -15,22 +15,30 @@ Implemented
 * Synchronizing groups
 * Talking in groups
 * Group member list
+* Fetching recent messages when opening a group chat
 
 To do
 -----
 
-* Download friend icons
-* Synchronizing things on the fly
-* Adding/removing/blocking friends
-* Inviting people to groups
-* Joining/leaving groups
-* Fetching recent messages when opening a conversation
+* Handle exceptions from all thrift methods (especially AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE)
+* Friend icons
+* Changing your own icon
+* Synchronize profile/buddy list on the fly
+* Add friends
+* Remove friend
+* Create groups
+* Invite people to groups
+* Join groups (=accept invitations)
+* Leave groups
 * Other message types
   * Images: Thumbnail should be easy
-  * Stickers: Figure out how to fetch, display as image
+  * Audio/Video: Possibly difficult, low priority
+  * Stickers: Figure out how to fetch, display as image. Send via commands?
   * Locations: Display as link
+* Emoji (is it possible to tap into the smiley system for sending too?)
 * Companion Pidgin plugin:
   * "Show more history" button
   * Enlarge images
   * Maybe even play audio and video messages
 * Sending/receiving "message read" notifications
+* Packaging

@@ -1,4 +1,4 @@
-#include "purplehttpclient.hpp"
+#include "linehttptransport.hpp"
 
 #include <sstream>
 #include <limits>
@@ -7,17 +7,14 @@
 
 #include <thrift/transport/TTransportException.h>
 
-PurpleHttpClient::PurpleHttpClient(
+LineHttpTransport::LineHttpTransport(
         PurpleAccount *acct,
         PurpleConnection *conn,
-        std::string host,
-        uint16_t port,
-        std::string default_path) :
+        std::string host) :
     acct(acct),
     conn(conn),
     host(host),
-    port(port),
-    default_path(default_path),
+    port(443),
     auth_token("x"),
     ssl(NULL),
     connection_id(0),
@@ -26,21 +23,21 @@ PurpleHttpClient::PurpleHttpClient(
 {
 }
 
-PurpleHttpClient::~PurpleHttpClient() { }
+LineHttpTransport::~LineHttpTransport() { }
 
-void PurpleHttpClient::set_auth_token(std::string token) {
+void LineHttpTransport::set_auth_token(std::string token) {
     this->auth_token = token;
 }
 
-int PurpleHttpClient::status_code() {
+int LineHttpTransport::status_code() {
     return status_code_;
 }
 
-int PurpleHttpClient::content_length() {
+int LineHttpTransport::content_length() {
     return content_length_;
 }
 
-void PurpleHttpClient::open() {
+void LineHttpTransport::open() {
     if (ssl)
         return;
 
@@ -52,12 +49,12 @@ void PurpleHttpClient::open() {
         acct,
         host.c_str(),
         port,
-        WRAPPER(PurpleHttpClient::ssl_connect),
-        WRAPPER_AT(PurpleHttpClient::ssl_error, end),
+        WRAPPER(LineHttpTransport::ssl_connect),
+        WRAPPER_AT(LineHttpTransport::ssl_error, end),
         (gpointer)this);
 }
 
-void PurpleHttpClient::close() {
+void LineHttpTransport::close() {
     if (!ssl)
         return;
 
@@ -73,21 +70,17 @@ void PurpleHttpClient::close() {
     response_buf.str("");
 }
 
-uint32_t PurpleHttpClient::read_virt(uint8_t *buf, uint32_t len) {
+uint32_t LineHttpTransport::read_virt(uint8_t *buf, uint32_t len) {
     return (uint32_t )response_buf.sgetn((char *)buf, len);
 }
 
-void PurpleHttpClient::write_virt(const uint8_t *buf, uint32_t len) {
+void LineHttpTransport::write_virt(const uint8_t *buf, uint32_t len) {
     request_buf.sputn((const char *)buf, len);
 }
 
-void PurpleHttpClient::send(std::function<void()> callback) {
-    send("", callback);
-}
-
-void PurpleHttpClient::send(std::string path, std::function<void()> callback) {
+void LineHttpTransport::send(std::string path, std::function<void()> callback) {
     Request req;
-    req.path = (path == "" ? default_path : path);
+    req.path = path;
     req.data = request_buf.str();
     req.callback = callback;
     request_queue.push(req);
@@ -97,13 +90,13 @@ void PurpleHttpClient::send(std::string path, std::function<void()> callback) {
     send_next();
 }
 
-/*const uin8_t* PurpleHttpClient::borrow_virt(uint8_t *buf, uint32_t *len) {
+/*const uin8_t* LineHttpTransport::borrow_virt(uint8_t *buf, uint32_t *len) {
 }
 
-void PurpleHttpClient::consume_virt(uint32_t len) {
+void LineHttpTransport::consume_virt(uint32_t len) {
 }*/
 
-void PurpleHttpClient::send_next() {
+void LineHttpTransport::send_next() {
     if (!ssl) {
         open();
         return;
@@ -149,7 +142,7 @@ void PurpleHttpClient::send_next() {
     purple_ssl_write(ssl, data_str.c_str(), data_str.size());
 }
 
-int PurpleHttpClient::reconnect() {
+int LineHttpTransport::reconnect() {
     close();
 
     in_progress = false;
@@ -160,13 +153,13 @@ int PurpleHttpClient::reconnect() {
     return FALSE;
 }
 
-void PurpleHttpClient::ssl_connect(PurpleSslConnection *, PurpleInputCondition) {
-    purple_ssl_input_add(ssl, WRAPPER(PurpleHttpClient::ssl_input), (gpointer)this);
+void LineHttpTransport::ssl_connect(PurpleSslConnection *, PurpleInputCondition) {
+    purple_ssl_input_add(ssl, WRAPPER(LineHttpTransport::ssl_input), (gpointer)this);
 
     send_next();
 }
 
-void PurpleHttpClient::ssl_input(PurpleSslConnection *, PurpleInputCondition cond) {
+void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition cond) {
     if (cond != PURPLE_INPUT_READ)
         return;
 
@@ -193,52 +186,6 @@ void PurpleHttpClient::ssl_input(PurpleSslConnection *, PurpleInputCondition con
             }
 
             return;
-
-
-                /*conn->wants_to_die = TRUE;
-                purple_connection_error(conn, "Lost connection to server.");
-            }
-
-            // Probably just the keep-alive connection timing out, so mark client as closed.
-
-            //purple_connection_error(conn, "Keep-alive connection died.");
-
-            purple_debug_info("line", "Connection died.");
-
-            close();*/
-
-            /*reconnect_count++;
-
-            // First disconnection could be just the keep-alive connection timing out. Try to
-            // reconnect immediately.
-
-            if (reconnect_count == 1) {
-                purple_debug_info("line", "Reconnecting immediately.");
-
-                reconnect();
-                return;
-            }
-
-            // Otherwise try to connect again after a timeout
-
-            if (reconnect_count == 2) {
-                purple_debug_info("line", "Reconnecting after a timeout.");
-
-                purple_timeout_add_seconds(
-                    5,
-                    WRAPPER(PurpleHttpClient::reconnect),
-                    (gpointer)this);
-
-                return;
-            }
-
-            purple_debug_info("line", "Connection broken :(");
-
-            // Connection seems to be broken.
-
-            conn->wants_to_die = TRUE;
-            purple_connection_error(conn, "Could not connect to server.");*/
-
             return;
         }
 
@@ -280,7 +227,7 @@ void PurpleHttpClient::ssl_input(PurpleSslConnection *, PurpleInputCondition con
     }
 }
 
-void PurpleHttpClient::ssl_error(PurpleSslConnection *, PurpleSslErrorType err) {
+void LineHttpTransport::ssl_error(PurpleSslConnection *, PurpleSslErrorType err) {
     purple_debug_warning("line", "SSL error: %s\n", purple_ssl_strerror(err));
 
     ssl = nullptr;
@@ -288,7 +235,7 @@ void PurpleHttpClient::ssl_error(PurpleSslConnection *, PurpleSslErrorType err) 
     purple_connection_ssl_error(conn, err);
 }
 
-void PurpleHttpClient::try_parse_response_header() {
+void LineHttpTransport::try_parse_response_header() {
     size_t header_end = response_str.find("\r\n\r\n");
     if (header_end == std::string::npos)
         return;
