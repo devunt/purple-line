@@ -25,12 +25,12 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     acct(acct),
     next_id(1)
 {
-    http_out = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/S4");
+    http_out = boost::make_shared<PurpleHttpClient>(acct, conn, LINE_HOST, LINE_PORT, "/S4");
 
     client_out = boost::make_shared<line::LineClient>(
         boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_out));
 
-    http_in = boost::make_shared<PurpleHttpClient>(acct, LINE_HOST, LINE_PORT, "/P4");
+    http_in = boost::make_shared<PurpleHttpClient>(acct, conn, LINE_HOST, LINE_PORT, "/P4");
 
     client_in = boost::make_shared<line::LineClient>(
         boost::make_shared<apache::thrift::protocol::TCompactProtocol>(http_in));
@@ -72,6 +72,8 @@ void PurpleLine::login(PurpleAccount *acct) {
 }
 
 void PurpleLine::close() {
+    std::cout << "I'm closing" << std::endl;
+
     delete this;
 }
 
@@ -117,15 +119,32 @@ void PurpleLine::start_login() {
         "libpurple",
         line::IdentityProvider::LINE,
         "");
-    http_out->send([this](int status) {
-        if (status != 200) {
+    http_out->send([this]() {
+        /*if (status != 200) {
             purple_debug_warning("line", "Login status: %d", status);
+
+            purple_connection_error(
+                conn,
+
+                "Could not log in (bad HTTP status code)");
+
             close();
             return;
-        }
+        }*/
 
         line::LoginResult result;
-        client_out->recv_loginWithIdentityCredentialForCertificate(result);
+
+        try {
+            client_out->recv_loginWithIdentityCredentialForCertificate(result);
+        } catch (line::Error &err) {
+            std::string msg = "Could not log in. " + err.reason;
+
+            purple_connection_error(
+                conn,
+                msg.c_str());
+
+            return;
+        }
 
         // Re-open output client to update persistent headers
         http_out->close();
@@ -139,7 +158,7 @@ void PurpleLine::start_login() {
 
 void PurpleLine::get_last_op_revision() {
     client_out->send_getLastOpRevision();
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         local_rev = client_out->recv_getLastOpRevision();
 
         get_profile();
@@ -148,7 +167,7 @@ void PurpleLine::get_last_op_revision() {
 
 void PurpleLine::get_profile() {
     client_out->send_getProfile();
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         client_out->recv_getProfile(profile);
 
         purple_account_set_alias(acct, profile.displayName.c_str());
@@ -168,12 +187,12 @@ void PurpleLine::get_profile() {
 
 void PurpleLine::get_contacts() {
     client_out->send_getAllContactIds();
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         std::vector<std::string> uids;
         client_out->recv_getAllContactIds(uids);
 
         client_out->send_getContacts(uids);
-        http_out->send([this](int status) {
+        http_out->send([this]() {
             std::vector<line::Contact> contacts;
             client_out->recv_getContacts(contacts);
 
@@ -231,12 +250,12 @@ void PurpleLine::get_contacts() {
 
 void PurpleLine::get_groups() {
     client_out->send_getGroupIdsJoined();
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         std::vector<std::string> gids;
         client_out->recv_getGroupIdsJoined(gids);
 
         client_out->send_getGroups(gids);
-        http_out->send([this](int status) {
+        http_out->send([this]() {
             std::vector<line::Group> groups;
             client_out->recv_getGroups(groups);
 
@@ -280,7 +299,9 @@ void PurpleLine::get_groups() {
 
 void PurpleLine::fetch_operations() {
     client_in->send_fetchOperations(local_rev, 50);
-    http_in->send([this](int status) {
+    http_in->send([this]() {
+        int status = http_in->status_code();
+
         if (status == -1) {
             // Plugin closing
             return;
@@ -497,7 +518,7 @@ int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags
     msg.text = message;
 
     client_out->send_sendMessage(0, msg);
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         line::Message msg_back;
         client_out->recv_sendMessage(msg_back);
 
@@ -531,11 +552,16 @@ void PurpleLine::join_chat(GHashTable *components) {
 
     set_chat_participants(PURPLE_CONV_CHAT(conv), group_map[gid]);
 
-    // TODO: is capturing components a bad idea?
     client_out->send_getRecentMessages(gid, 20);
-    http_out->send([this, conv](int status) {
+    http_out->send([this, purple_id]() {
         std::vector<line::Message> recent_msgs;
         client_out->recv_getRecentMessages(recent_msgs);
+
+        PurpleConversation *conv = purple_find_chat(conn, purple_id);
+        if (!conv) {
+            // Chat went away already?
+            return;
+        }
 
         for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
             line::Message &msg = *i;
@@ -561,7 +587,7 @@ int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags)
     msg.text = message;
 
     client_out->send_sendMessage(0, msg);
-    http_out->send([this](int status) {
+    http_out->send([this]() {
         line::Message msg_back;
         client_out->recv_sendMessage(msg_back);
     });

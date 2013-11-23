@@ -19,12 +19,12 @@ Implemented
 To do
 -----
 
+* Download friend icons
 * Synchronizing things on the fly
 * Adding/removing/blocking friends
 * Inviting people to groups
 * Joining/leaving groups
 * Fetching recent messages when opening a conversation
-* Sending/receiving "message read" notifications
 * Other message types
   * Images: Thumbnail should be easy
   * Stickers: Figure out how to fetch, display as image
@@ -33,3 +33,4 @@ To do
   * "Show more history" button
   * Enlarge images
   * Maybe even play audio and video messages
+* Sending/receiving "message read" notifications

@@ -9,47 +9,42 @@
 
 PurpleHttpClient::PurpleHttpClient(
         PurpleAccount *acct,
+        PurpleConnection *conn,
         std::string host,
         uint16_t port,
-        std::string path) :
+        std::string default_path) :
     acct(acct),
+    conn(conn),
     host(host),
     port(port),
-    path(path),
+    default_path(default_path),
     auth_token("x"),
     ssl(NULL),
     connection_id(0),
-    first_request(true),
-    in_progress(false),
-    status_code(-1),
-    content_length(-1)
+    status_code_(0),
+    content_length_(0)
 {
 }
 
 PurpleHttpClient::~PurpleHttpClient() { }
 
-void PurpleHttpClient::set_path(std::string path) {
-    this->path = path;
-}
-
 void PurpleHttpClient::set_auth_token(std::string token) {
     this->auth_token = token;
 }
 
-static void wrap_ssl_connect(gpointer data, PurpleSslConnection *ssl, PurpleInputCondition cond) {
-    ((PurpleHttpClient *)data)->ssl_connect();
+int PurpleHttpClient::status_code() {
+    return status_code_;
 }
 
-static void wrap_ssl_error(PurpleSslConnection *ssl, PurpleSslErrorType err, gpointer data) {
-    ((PurpleHttpClient *)data)->ssl_error(err);
+int PurpleHttpClient::content_length() {
+    return content_length_;
 }
 
 void PurpleHttpClient::open() {
     if (ssl)
         return;
 
-    purple_debug_info("line", "Connecting...\n");
-
+    in_progress = false;
     first_request = true;
 
     connection_id++;
@@ -57,8 +52,8 @@ void PurpleHttpClient::open() {
         acct,
         host.c_str(),
         port,
-        wrap_ssl_connect,
-        wrap_ssl_error,
+        WRAPPER(PurpleHttpClient::ssl_connect),
+        WRAPPER_AT(PurpleHttpClient::ssl_error, end),
         (gpointer)this);
 }
 
@@ -72,7 +67,10 @@ void PurpleHttpClient::close() {
 
     x_ls = "";
 
+    request_buf.str("");
+
     response_str = "";
+    response_buf.str("");
 }
 
 uint32_t PurpleHttpClient::read_virt(uint8_t *buf, uint32_t len) {
@@ -83,39 +81,16 @@ void PurpleHttpClient::write_virt(const uint8_t *buf, uint32_t len) {
     request_buf.sputn((const char *)buf, len);
 }
 
-void PurpleHttpClient::send(std::function<void(int)> callback) {
-    std::string request_str = request_buf.str();
+void PurpleHttpClient::send(std::function<void()> callback) {
+    send("", callback);
+}
 
-    std::ostringstream data;
-
-    data
-        << "POST " << path << " HTTP/1.1" "\r\n"
-        << "Content-Length: " << request_str.size() << "\r\n";
-
-    if (x_ls.size() > 0)
-        data << "X-LS: " << x_ls << "\r\n";
-
-    if (first_request) {
-        data
-            << "Connection: Keep-Alive" "\r\n"
-            << "Content-Type: application/x-thrift" "\r\n"
-            << "Host: " << host << ":" << port << "\r\n"
-            << "Accept: application/x-thrift" "\r\n"
-            << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
-            << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
-            << "X-Line-Access: " << auth_token << "\r\n";
-
-        first_request = false;
-    }
-
-    data
-        << "\r\n"
-        << request_str;
-
+void PurpleHttpClient::send(std::string path, std::function<void()> callback) {
     Request req;
-    req.data = data.str();
+    req.path = (path == "" ? default_path : path);
+    req.data = request_buf.str();
     req.callback = callback;
-    request_queue.push_back(req);
+    request_queue.push(req);
 
     request_buf.str("");
 
@@ -137,28 +112,61 @@ void PurpleHttpClient::send_next() {
     if (in_progress || request_queue.empty())
         return;
 
-    status_code = -1;
-    content_length = -1;
+    status_code_ = -1;
+    content_length_ = -1;
 
     Request &next_req = request_queue.front();
 
+    std::ostringstream data;
+
+    data
+        << "POST " << next_req.path << " HTTP/1.1" "\r\n"
+        << "Content-Length: " << next_req.data.size() << "\r\n";
+
+    if (x_ls.size() > 0)
+        data << "X-LS: " << x_ls << "\r\n";
+
+    if (first_request) {
+        data
+            << "Connection: Keep-Alive" "\r\n"
+            << "Content-Type: application/x-thrift" "\r\n"
+            << "Host: " << host << ":" << port << "\r\n"
+            << "Accept: application/x-thrift" "\r\n"
+            << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
+            << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
+            << "X-Line-Access: " << auth_token << "\r\n";
+
+        first_request = false;
+    }
+
+    data
+        << "\r\n"
+        << next_req.data;
+
+    std::string data_str = data.str();
+
     in_progress = true;
-    purple_ssl_write(ssl, next_req.data.c_str(), next_req.data.size());
+    purple_ssl_write(ssl, data_str.c_str(), data_str.size());
 }
 
-static void wrap_ssl_input(gpointer data, PurpleSslConnection *ssl, PurpleInputCondition cond) {
-    ((PurpleHttpClient *)data)->ssl_input(cond);
+int PurpleHttpClient::reconnect() {
+    close();
+
+    in_progress = false;
+
+    open();
+
+    // Don't repeat when using as timeout callback
+    return FALSE;
 }
 
-void PurpleHttpClient::ssl_connect() {
-    purple_debug_info("line", "Connected.\n");
-
-    purple_ssl_input_add(ssl, wrap_ssl_input, (gpointer)this);
+void PurpleHttpClient::ssl_connect(PurpleSslConnection *, PurpleInputCondition) {
+    purple_ssl_input_add(ssl, WRAPPER(PurpleHttpClient::ssl_input), (gpointer)this);
 
     send_next();
 }
 
-void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
+void PurpleHttpClient::ssl_input(PurpleSslConnection *, PurpleInputCondition cond) {
     if (cond != PURPLE_INPUT_READ)
         return;
 
@@ -171,15 +179,67 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
             if (any)
                 break;
 
-            purple_debug_warning("line", "Server closed connection.\n");
+            // Disconnected from server.
 
-            for (Request &r: request_queue)
-                r.callback(-1);
-
-            request_queue.clear(); // TODO: Maybe add retry logic
+            purple_debug_info("line", "A connection died.\n");
 
             close();
-            break;
+
+            // If there was a request in progress, re-open immediately to try again.
+            if (in_progress) {
+                purple_debug_info("line", "Reconnecting immediately to re-send.\n");
+
+                open();
+            }
+
+            return;
+
+
+                /*conn->wants_to_die = TRUE;
+                purple_connection_error(conn, "Lost connection to server.");
+            }
+
+            // Probably just the keep-alive connection timing out, so mark client as closed.
+
+            //purple_connection_error(conn, "Keep-alive connection died.");
+
+            purple_debug_info("line", "Connection died.");
+
+            close();*/
+
+            /*reconnect_count++;
+
+            // First disconnection could be just the keep-alive connection timing out. Try to
+            // reconnect immediately.
+
+            if (reconnect_count == 1) {
+                purple_debug_info("line", "Reconnecting immediately.");
+
+                reconnect();
+                return;
+            }
+
+            // Otherwise try to connect again after a timeout
+
+            if (reconnect_count == 2) {
+                purple_debug_info("line", "Reconnecting after a timeout.");
+
+                purple_timeout_add_seconds(
+                    5,
+                    WRAPPER(PurpleHttpClient::reconnect),
+                    (gpointer)this);
+
+                return;
+            }
+
+            purple_debug_info("line", "Connection broken :(");
+
+            // Connection seems to be broken.
+
+            conn->wants_to_die = TRUE;
+            purple_connection_error(conn, "Could not connect to server.");*/
+
+            return;
         }
 
         if (count == (size_t)-1)
@@ -191,14 +251,24 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
 
         try_parse_response_header();
 
-        if (content_length >= 0 && response_str.size() >= (size_t)content_length) {
-            response_buf.str(response_str.substr(0, content_length));
-            response_str.erase(0, content_length);
+        if (content_length_ >= 0 && response_str.size() >= (size_t)content_length_) {
+            if (status_code_ == 403) {
+                // Don't try to reconnect because this usually means the user has logged in from
+                // elsewhere.
+                // TODO: Check actual reason
+
+                conn->wants_to_die = TRUE;
+                purple_connection_error(conn, "Session died.");
+                return;
+            }
+
+            response_buf.str(response_str.substr(0, content_length_));
+            response_str.erase(0, content_length_);
 
             int connection_id_before = connection_id;
 
-            request_queue.front().callback(status_code);
-            request_queue.pop_front();
+            request_queue.front().callback();
+            request_queue.pop();
 
             in_progress = false;
 
@@ -210,8 +280,12 @@ void PurpleHttpClient::ssl_input(PurpleInputCondition cond) {
     }
 }
 
-void PurpleHttpClient::ssl_error(PurpleSslErrorType err) {
+void PurpleHttpClient::ssl_error(PurpleSslConnection *, PurpleSslErrorType err) {
     purple_debug_warning("line", "SSL error: %s\n", purple_ssl_strerror(err));
+
+    ssl = nullptr;
+
+    purple_connection_ssl_error(conn, err);
 }
 
 void PurpleHttpClient::try_parse_response_header() {
@@ -222,7 +296,7 @@ void PurpleHttpClient::try_parse_response_header() {
     std::istringstream stream(response_str.substr(0, header_end));
 
     stream.ignore(256, ' ');
-    stream >> status_code;
+    stream >> status_code_;
     stream.ignore(256, '\n');
 
     while (stream) {
@@ -232,7 +306,7 @@ void PurpleHttpClient::try_parse_response_header() {
         stream.ignore(256, ' ');
 
         if (name == "Content-Length")
-            stream >> content_length;
+            stream >> content_length_;
 
         if (name == "X-LS")
             std::getline(stream, x_ls, '\r');

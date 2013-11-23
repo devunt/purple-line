@@ -20,6 +20,8 @@
 
 class PurpleLine {
 
+private:
+
     PurpleConnection *conn;
     PurpleAccount *acct;
 

@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 #include <sstream>
-#include <deque>
+#include <queue>
 
 #include <stdint.h>
 
@@ -12,21 +12,25 @@
 
 #include <transport/TTransport.h>
 
+#include "wrapper.hpp"
+
 class PurpleHttpClient : public apache::thrift::transport::TTransport {
 
     class Request {
     public:
+        std::string path;
         std::string data;
-        std::function<void(int)> callback;
+        std::function<void()> callback;
     };
 
     static const size_t BUFFER_SIZE = 4096;
 
     PurpleAccount *acct;
+    PurpleConnection *conn;
 
     std::string host;
     uint16_t port;
-    std::string path;
+    std::string default_path;
     std::string auth_token;
     std::string x_ls;
 
@@ -39,16 +43,18 @@ class PurpleHttpClient : public apache::thrift::transport::TTransport {
     std::stringbuf request_buf;
 
     bool in_progress;
-    int status_code;
-    int content_length;
     std::string response_str;
     std::stringbuf response_buf;
 
-    std::deque<Request> request_queue;
+    std::queue<Request> request_queue;
+
+    int status_code_;
+    int content_length_;
 
 public:
 
-    PurpleHttpClient(PurpleAccount *acct, std::string host, uint16_t port, std::string path);
+    PurpleHttpClient(PurpleAccount *acct, PurpleConnection *conn,
+        std::string host, uint16_t port, std::string default_path="");
     ~PurpleHttpClient();
 
     void set_path(std::string path);
@@ -60,20 +66,24 @@ public:
     virtual uint32_t read_virt(uint8_t *buf, uint32_t len);
     void write_virt(const uint8_t *buf, uint32_t len);
 
-    virtual void send(std::function<void(int)> callback);
+    void send(std::function<void()> callback);
+    void send(std::string path, std::function<void()> callback);
+    int status_code();
+    int content_length();
 
     //virtual const uin8_t* borrow_virt(uint8_t *buf, uint32_t *len);
     //virtual void consume_virt(uint32_t len);
 
 //private:
 
-    void ssl_connect();
-    void ssl_input(PurpleInputCondition cond);
-    void ssl_error(PurpleSslErrorType err);
+    void ssl_connect(PurpleSslConnection *, PurpleInputCondition);
+    void ssl_input(PurpleSslConnection *, PurpleInputCondition cond);
+    void ssl_error(PurpleSslConnection *, PurpleSslErrorType err);
 
 private:
 
     void send_next();
+    int reconnect();
 
     void try_parse_response_header();
 };

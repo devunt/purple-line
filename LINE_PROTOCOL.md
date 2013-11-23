@@ -3,7 +3,7 @@ Naver LINE protocol
 
 Matti Virkkunen <mvirkkunen@gmail.com>
 
-Document is accurate as of 2013-11-21.
+Document is accurate as of 2013-11-23.
 
 This unofficial document describes the LINE (by Naver / NHN Japan) instant messenger protocol.
 Observations are based mostly on monitoring the desktop Windows client's traffic (under Wine), and
@@ -184,12 +184,12 @@ are http://os.line.naver.jp/os/m/MSGID where MSGID is the message's id field.
 
 "Official accounts" broadcast messages to many clients at once, so their image message data is
 stored on publicly accessible servers (currently seems to be Akamai CDN). For those messages no
-embedded previes is included and the image URLs are stored in the contentMetadata map with the
+embedded preview is included and the image URLs are stored in the contentMetadata map with the
 following keys:
 
 * PREVIEW_URL = absolute URL for preview image
 * DOWNLOAD_URL = absolute URL for full-size image
-* PUBLIC = TRUE (haven't seen other values)
+* PUBLIC = "TRUE" (haven't seen other values)
 
 As an example of a publicly available image message, have a Pikachu:
 

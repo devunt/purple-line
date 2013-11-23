@@ -1,44 +1,28 @@
 #include <glib.h>
 
-#include "account.h"
-#include "config.h"
-#include "debug.h"
-#include "prpl.h"
-#include "version.h"
+#include <account.h>
+#include <config.h>
+#include <debug.h>
+#include <prpl.h>
+#include <version.h>
 
 #include "purpleline.hpp"
-
-template<typename Sig, Sig F>
-struct wrapper_;
-
-template<typename Class, typename Ret, typename... Args, Ret(Class::*Func)(Args...)>
-struct wrapper_<Ret(Class::*)(Args...), Func> {
-    Ret static f(PurpleConnection *conn, Args... args)
-    {
-        return (((Class *)conn->proto_data)->*Func)(args...);
-    }
-
-    Ret static f(PurpleAccount *acct, Args... args)
-    {
-        return (((Class *)purple_account_get_connection(acct)->proto_data)->*Func)(args...);
-    }
-};
-
-#define WRAPPER(MEMBER) (wrapper_<decltype(&MEMBER), &MEMBER>::f)
+#include "wrapper.hpp"
 
 static void line_plugin_destroy(PurplePlugin *plugin);
+static void line_plugin_init(PurplePlugin *plugin);
 
 static PurplePluginProtocolInfo prpl_info;
 
 static PurplePluginInfo info;
 
 static void init_icon_spec(PurpleBuddyIconSpec &s) {
-    s.format = (char *)"png";
+    s.format = (char *)"jpeg";
     s.min_width = 0;
     s.min_height = 0;
-    s.max_width = 128;
-    s.max_height = 128;
-    s.max_filesize = 10000;
+    s.max_width = 200;
+    s.max_height = 200;
+    s.max_filesize = 100 * 1024; // random number
     s.scale_rules = PURPLE_ICON_SCALE_DISPLAY;
 }
 
