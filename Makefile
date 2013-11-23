@@ -6,8 +6,10 @@ LIBS = `pkg-config --libs purple thrift glib`
 
 MAIN = libline.so
 
-SRCS = pluginmain.cpp purplehttpclient.cpp purpleline.cpp \
-	thrift_line/line_constants.cpp thrift_line/line_types.cpp thrift_line/Line.cpp
+GEN_SRCS = thrift_line/line_constants.cpp thrift_line/line_types.cpp thrift_line/Line.cpp
+REAL_SRCS = pluginmain.cpp purplehttpclient.cpp purpleline.cpp
+SRCS += $(GEN_SRCS)
+SRCS += $(REAL_SRCS)
 
 OBJS = $(SRCS:.cpp=.o)
 
@@ -35,8 +37,9 @@ install:
 
 depend: .depend
 
-.depend: thrift_line $(SRCS)
-	$(CPP) $(CFLAGS) -MM $(SRCS) >.depend
+.depend: thrift_line $(REAL_SRCS)
+	rm -f .depend
+	$(CPP) $(CFLAGS) -MM $(REAL_SRCS) >>.depend
 
 -include .depend
 
