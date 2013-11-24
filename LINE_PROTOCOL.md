@@ -272,10 +272,10 @@ Informs that the client should refresh its "settings" using getSettingsAttribute
 
 ### SEND_CHAT_CHECKED (40)
 
-### CONTACT_CONTACT_SETTINGS (name guessed) (49)
+### UPDATE_CONTACT (49)
 
-Seems to be sent when the "hidden" setting of the contact changes. This causes the official client to
-re-request data about the contact with getContact() (singular!).
+Informs that the client should refresh a contact. The desktop client uses the singular getContact()
+for this instead of the list version.
 
 * param1 = ID of the contact that was changed
 * param2 = (mystery - seen "4", "16")

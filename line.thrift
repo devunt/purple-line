@@ -1,10 +1,9 @@
-// Naver LINE protocol interface file, desktop client version
+// Naver LINE protocol interface file, functions as used by the desktop client.
 
 namespace cpp line
 
 // :%s/.*"\([^"]*\)", \d\+, \(\d\+\).*/\1 = \2;/
 
-// er.class
 enum ErrorCode {
     ILLEGAL_ARGUMENT = 0;
     AUTHENTICATION_FAILED = 1;
@@ -39,16 +38,32 @@ enum ErrorCode {
     USER_CANNOT_ACCEPT_PRESENTS = 30;
     USER_NOT_STICKER_OWNER = 32;
     MAINTENANCE_ERROR = 33;
+    ACCOUNT_NOT_MATCHED = 34;
+    ABUSE_BLOCK = 35;
+    NOT_FRIEND = 36;
+    NOT_ALLOWED_CALL = 37;
+    BLOCK_FRIEND = 38;
+    INCOMPATIBLE_VOIP_VERSION = 39;
+    INVALID_SNS_ACCESS_TOKEN = 40;
+    EXTERNAL_SERVICE_NOT_AVAILABLE = 41;
+    NOT_ALLOWED_ADD_CONTACT = 42;
+    NOT_CERTIFICATED = 43;
+    NOT_ALLOWED_SECONDARY_DEVICE = 44;
+    INVALID_PIN_CODE = 45;
+    NOT_FOUND_IDENTITY_CREDENTIAL = 46;
+    EXCEED_FILE_MAX_SIZE = 47;
+    EXCEED_DAILY_QUOTA = 48;
+    NOT_SUPPORT_SEND_FILE = 49;
+    MUST_UPGRADE = 50;
+    NOT_AVAILABLE_PIN_CODE_SESSION = 51;
 }
 
-// jq.class
 exception Error {
     1: ErrorCode code;
     2: string reason;
     3: map<string, string> parameterMap;
 }
 
-// ex.class
 struct Location {
     1: string title;
     2: string address;
@@ -57,14 +72,12 @@ struct Location {
     5: string phone;
 }
 
-// fb.class
 enum MessageToType {
     USER = 0;
     ROOM = 1;
     GROUP = 2;
 }
 
-// eo.class
 enum ContentType {
     NONE = 0;
     IMAGE = 1;
@@ -80,7 +93,6 @@ enum ContentType {
     APPLINK = 11;
 }
 
-// fc.class
 struct Message {
     1: string from;
     2: string to;
@@ -96,7 +108,6 @@ struct Message {
     18: optional map<string, string> contentMetadata;
 }
 
-// fn.class
 enum OperationType {
     END_OF_OPERATION = 0;
     UPDATE_PROFILE = 1;
@@ -147,15 +158,23 @@ enum OperationType {
     REMOVE_ALL_MESSAGES = 46;
     NOTIFIED_UPDATE_PURCHASES = 47;
     DUMMY = 48;
+    UPDATE_CONTACT = 49;
+    NOTIFIED_RECEIVED_CALL = 50;
+    CANCEL_CALL = 51;
+    NOTIFIED_REDIRECT = 52;
+    NOTIFIED_CHANNEL_SYNC = 53;
+    FAILED_SEND_MESSAGE = 54;
+    NOTIFIED_READ_MESSAGE = 55;
+    FAILED_EMAIL_CONFIRMATION = 56;
+    NOTIFIED_PUSH_NOTICENTER_ITEM = 59;
+    NOTIFIED_CHAT_CONTENT = 58;
 }
 
-// fm.class
 enum OperationStatus {
     NORMAL = 1;
     ALERT_DISABLED = 1;
 }
 
-// fo.class
 struct Operation {
     1: i64 revision;
     2: i64 createdTime;
@@ -184,7 +203,6 @@ struct LoginResult {
     5: i32 type;
 }
 
-// gg.class
 struct Profile {
     1: string mid;
     3: string userid;
@@ -194,14 +212,13 @@ struct Profile {
     20: string displayName;
     21: string phoneticName;
     22: string pictureStatus;
-    //23: string thumbnailUrl; // This is probably an old field.
+    //23: string thumbnailUrl_; // Old field.
     24: string statusMessage;
     31: bool allowSearchByUserid;
     32: bool allowSearchByEmail;
-    33: string thumbnailUrl;
+    33: string picturePath;
 }
 
-// en.class
 enum ContactType {
     MID = 0;
     PHONE = 1;
@@ -214,7 +231,6 @@ enum ContactType {
     PROMOTION_BOT = 8;
 }
 
-// em.class
 enum ContactStatus {
     UNSPECIFIED = 0;
     FRIEND = 1;
@@ -229,7 +245,6 @@ enum ContactRelation {
     NOT_REGISTERED = 2;
 }
 
-// ef.class
 struct Contact {
     1: string mid;
     2: i64 createdTime;
@@ -239,18 +254,19 @@ struct Contact {
     22: string displayName;
     23: string phoneticName;
     24: string pictureStatus;
-    //25: string thumbnailUrl; // This is probably an old field.
+    25: string thumbnailUrl_; // Old field.
     26: string statusMessage;
+    27: string displayNameOverridden;
+    28: i64 facoriteTime,
     31: bool capableVoiceCall;
     32: bool capableVideoCall;
     33: bool capableMyhome;
     34: bool capableBuddy;
     35: i32 attributes; // Bitfield? 32 = "official account"
     36: i64 settings; // Bitfield? 4 = hidden
-    37: string thumbnailUrl;
+    37: string picturePath;
 }
 
-// et.class
 struct Group {
     1: string id;
     2: i64 createdTime;
@@ -261,7 +277,7 @@ struct Group {
     22: list<Contact> invitee;
 }
 
-// jt.class
+// cyd.class
 service Line {
     // Gets authentication key
     LoginResult loginWithIdentityCredentialForCertificate(
@@ -274,31 +290,41 @@ service Line {
         9: string certificate) throws (1: Error e);
 
     // Gets current user's profile
-    Profile getProfile();
+    Profile getProfile() throws (1: Error e);
 
     // Gets list of current user's contact IDs
-    list<string> getAllContactIds();
+    list<string> getAllContactIds() throws (1: Error e);
 
     // Gets list of current user's recommended contacts IDs
-    list<string> getRecommendationIds();
+    list<string> getRecommendationIds() throws (1: Error e);
 
     // Gets detailed information on contacts
     list<Contact> getContacts(2: list<string> ids);
 
-    // Gets list of current user's joined groups
-    list<string> getGroupIdsJoined();
+    Contact findAndAddContactsByMid(1: i32 reqSeq, 2: string mid) throws (1: Error e);
 
-    list<Group> getGroups(2: list<string> ids);
+    // Gets list of current user's joined groups
+    list<string> getGroupIdsJoined() throws (1: Error e);
+
+    list<Group> getGroups(2: list<string> ids) throws (1: Error e);
 
     // Get recent messages from a group chat (n.b. arg names guessed)
-    list<Message> getRecentMessages(2: string gid, 3: i32 count);
+    list<Message> getRecentMessages(2: string gid, 3: i32 count) throws (1: Error e);
 
     // Returns incoming events
-    list<Operation> fetchOperations(2: i64 localRev, 3: i32 count);
+    list<Operation> fetchOperations(2: i64 localRev, 3: i32 count) throws (1: Error e);
+
+    // Newer function for getting incoming events? Not used by desktop client, but exists in at
+    // least Android client.
+    list<Operation> fetchOps(
+        2: i64 localRev,
+        3: i32 count,
+        4: i64 globalRev,
+        5: i64 individualRev)
 
     // Returns current revision ID for use with fetchOperations
-    i64 getLastOpRevision();
+    i64 getLastOpRevision() throws (1: Error e);
 
     // Sends a message to chat or user
-    Message sendMessage(1: i32 seq, 2: Message message);
+    Message sendMessage(1: i32 seq, 2: Message message) throws (1: Error e);
 }

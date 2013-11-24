@@ -16,7 +16,7 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
 {
     c_out = boost::make_shared<ThriftClient>(acct, conn, "/S4");
     c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
-    http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, false);
+    http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, true);
 }
 
 PurpleLine::~PurpleLine() {
@@ -130,10 +130,10 @@ void PurpleLine::get_profile() {
 
         // Update account icon (not sure if there's a way to tell whether it has changed, maybe
         // pictureStatus?)
-        if (profile.thumbnailUrl != "") {
-            std::string icon_path = profile.thumbnailUrl + "/preview";
+        if (profile.picturePath != "") {
+            std::string pic_path = profile.picturePath + "/preview";
             //if (icon_path != purple_account_get_string(acct, "icon_path", "")) {
-                http_os->request("GET", icon_path, [this, icon_path]{
+                http_os->request("GET", pic_path, [this, pic_path]{
                     guchar *buffer = (guchar *)malloc(http_os->content_length() * sizeof(guchar));
                     http_os->read(buffer, http_os->content_length());
 
@@ -501,13 +501,13 @@ void PurpleLine::blist_update_buddy(line::Contact contact) {
     purple_blist_alias_buddy(buddy, contact.displayName.c_str());
 
     // Update buddy icon if necessary
-    if (contact.thumbnailUrl != "") {
-        std::string icon_path = contact.thumbnailUrl + "/preview";
-        const char *current_icon_path = purple_buddy_icons_get_checksum_for_user(buddy);
-        if (!current_icon_path || std::string(current_icon_path) != icon_path) {
+    if (contact.picturePath != "") {
+        std::string pic_path = contact.picturePath + "/preview";
+        const char *current_pic_path = purple_buddy_icons_get_checksum_for_user(buddy);
+        if (!current_pic_path || std::string(current_pic_path) != pic_path) {
             std::string uid = contact.mid;
 
-            http_os->request("GET", icon_path, [this, uid, icon_path]{
+            http_os->request("GET", pic_path, [this, uid, pic_path]{
                 uint8_t *buffer = (uint8_t *)malloc(http_os->content_length() * sizeof(uint8_t));
                 http_os->read(buffer, http_os->content_length());
 
@@ -516,7 +516,7 @@ void PurpleLine::blist_update_buddy(line::Contact contact) {
                     uid.c_str(),
                     (void *)buffer,
                     (size_t)http_os->content_length(),
-                    icon_path.c_str());
+                    pic_path.c_str());
             });
         }
     } else {
@@ -715,7 +715,7 @@ LineHttpTransport *ThriftProtocol::getTransport() {
 ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
     : line::LineClientT<ThriftProtocol>(
         boost::make_shared<ThriftProtocol>(
-            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, true))),
+            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, false))),
     path(path)
 {
     http = piprot_->getTransport();
