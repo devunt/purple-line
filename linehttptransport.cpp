@@ -7,6 +7,8 @@
 
 #include <thrift/transport/TTransportException.h>
 
+#include "thrift_line/line_types.h"
+
 #define USER_AGENT "purple-line (LINE for libpurple/Pidgin/Finch)"
 #define APPLICATION_NAME "DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64"
 
@@ -180,7 +182,7 @@ void LineHttpTransport::ssl_connect(PurpleSslConnection *, PurpleInputCondition)
 }
 
 void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition cond) {
-    if (cond != PURPLE_INPUT_READ)
+    if (!ssl || cond != PURPLE_INPUT_READ)
         return;
 
     bool any = false;
@@ -193,8 +195,6 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
                 break;
 
             // Disconnected from server.
-
-            purple_debug_info("line", "A connection died.\n");
 
             close();
 
@@ -233,7 +233,41 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
 
             int connection_id_before = connection_id;
 
-            request_queue.front().callback();
+            try {
+                request_queue.front().callback();
+            } catch (line::Error &err) {
+                switch (err.code) {
+                    case line::ErrorCode::NOT_AUTHORIZED_DEVICE:
+                        if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
+                            conn->wants_to_die = TRUE;
+                            purple_connection_error(conn,
+                                "LINE: You have been logged out because "
+                                "you logged in from another device.");
+                            return;
+                        } else {
+                            throw;
+                        }
+
+                        break;
+                    default:
+                        purple_notify_error(conn,
+                            "LINE connection error",
+                            err.reason.c_str(),
+                            nullptr);
+                        break;
+                }
+            } catch (apache::thrift::TApplicationException &err) {
+                // Likely a Thrift deserialization error. Connection is probably in an inconsistent
+                // state, so better kill it.
+
+                std::string msg = "LINE: Connection error: ";
+                msg += err.what();
+
+                conn->wants_to_die = TRUE;
+                purple_connection_error(conn, msg.c_str());
+                return;
+            }
+
             request_queue.pop();
 
             in_progress = false;

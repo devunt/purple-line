@@ -83,6 +83,7 @@ private:
 
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
+    int send_message(std::string to, int chat_purple_id, std::string text);
     void push_recent_message(std::string id);
 
 };

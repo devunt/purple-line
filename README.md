@@ -20,14 +20,15 @@ Implemented
   * Add/block implemented as add/remove
 * Buddy icons
 * Account icon
+* Handle exceptions from all thrift methods (especially AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE)
 
 To do
 -----
 
-* Handle exceptions from all thrift methods (especially AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE)
 * Changing your own icon
 * Synchronize groups on the fly
 * Add friends
+  * Which search methods to support?
 * Remove friend
 * Create groups
 * Invite people to groups
@@ -44,4 +45,6 @@ To do
   * Enlarge images
   * Maybe even play audio and video messages
 * Sending/receiving "message read" notifications
+* Refactor LineHttpTransport into a separate plain HTTP client and Thrift client
+  * Also support non-SSL connections
 * Packaging

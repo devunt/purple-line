@@ -1,5 +1,7 @@
 #include <iostream>
 
+#include <time.h>
+
 #include <conversation.h>
 #include <debug.h>
 #include <sslconn.h>
@@ -22,6 +24,7 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
 PurpleLine::~PurpleLine() {
     c_out->close();
     c_in->close();
+    http_os->close();
 }
 
 const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
@@ -389,8 +392,6 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
             }
         } else if (msg.toType == line::MessageToType::GROUP) {
             PurpleConversation *conv = purple_find_chat(conn, chat_id_to_purple_id[msg.to]);
-            if (!conv)
-                return; // Chat isn't open
 
             if (conv) {
                 purple_conv_chat_write(
@@ -685,24 +686,6 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group)
     g_list_free(flags);
 }
 
-int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
-    line::Message msg;
-
-    msg.from = profile.mid;
-    msg.to = who;
-    msg.text = message;
-
-    c_out->send_sendMessage(0, msg);
-    c_out->send([this]() {
-        line::Message msg_back;
-        c_out->recv_sendMessage(msg_back);
-
-        push_recent_message(msg_back.id);
-    });
-
-    return 1;
-}
-
 void PurpleLine::join_chat(GHashTable *components) {
     char *id_ptr = (char *)g_hash_table_lookup(components, "id");
     if (!id_ptr) {
@@ -748,26 +731,65 @@ void PurpleLine::join_chat(GHashTable *components) {
     });
 }
 
-int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags) {
-    std::string gid = chat_purple_id_to_id[id];
-    if (gid == "") {
-        purple_debug_warning("line", "Tried to send to a nonexistent chat.");
-        return 0;
+
+int PurpleLine::send_message(std::string to, int chat_purple_id, std::string text) {
+    if (chat_purple_id) {
+        to = chat_purple_id_to_id[chat_purple_id];
+        if (to == "") {
+            purple_debug_warning("line", "Tried to send to a nonexistent chat.");
+            return 0;
+        }
     }
 
     line::Message msg;
 
     msg.from = profile.mid;
-    msg.to = gid;
-    msg.text = message;
+    msg.to = to;
+    msg.text = text;
 
     c_out->send_sendMessage(0, msg);
-    c_out->send([this]() {
+    c_out->send([this, to, chat_purple_id]() {
         line::Message msg_back;
-        c_out->recv_sendMessage(msg_back);
+
+        try {
+            c_out->recv_sendMessage(msg_back);
+        } catch (line::Error &err) {
+            PurpleConversation *conv = nullptr;
+
+            if (chat_purple_id) {
+                conv = purple_find_chat(conn, chat_purple_id);
+            } else {
+                conv = purple_find_conversation_with_account(
+                    PURPLE_CONV_TYPE_IM,
+                    to.c_str(),
+                    acct);
+            }
+
+            if (conv) {
+                purple_conversation_write(
+                    conv,
+                    "",
+                    "Failed to send message.",
+                    (PurpleMessageFlags)PURPLE_MESSAGE_ERROR,
+                    time(NULL));
+            }
+
+            throw;
+        }
+
+        if (!chat_purple_id)
+            push_recent_message(msg_back.id);
     });
 
     return 1;
+}
+
+int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
+    return send_message(who, 0, message);
+}
+
+int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags) {
+    return send_message("", id, message);
 }
 
 void PurpleLine::push_recent_message(std::string id) {
