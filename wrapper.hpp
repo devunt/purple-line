@@ -14,12 +14,13 @@ template<typename Class, typename Ret, typename... Args, Ret(Class::*Func)(Args.
 struct wrapper_<Ret(Class::*)(Args...), Func> {
     Ret static f(PurpleConnection *conn, Args... args)
     {
-        return (((Class *)conn->proto_data)->*Func)(args...);
+        return (((Class *)purple_connection_get_protocol_data(conn))->*Func)(args...);
     }
 
     Ret static f(PurpleAccount *acct, Args... args)
     {
-        return (((Class *)purple_account_get_connection(acct)->proto_data)->*Func)(args...);
+        return (((Class *)purple_connection_get_protocol_data(purple_account_get_connection(acct)))
+            ->*Func)(args...);
     }
 
     Ret static f(gpointer context, Args... args) {

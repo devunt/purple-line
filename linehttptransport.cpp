@@ -15,12 +15,12 @@ LineHttpTransport::LineHttpTransport(
         PurpleConnection *conn,
         std::string host,
         uint16_t port,
-        bool plain_http) :
+        bool ls_mode) :
     acct(acct),
     conn(conn),
     host(host),
     port(port),
-    plain_http(plain_http),
+    ls_mode(ls_mode),
     auth_token("x"),
     ssl(NULL),
     connection_id(0),
@@ -127,27 +127,29 @@ void LineHttpTransport::send_next() {
     if (next_req.method == "POST")
         data << "Content-Length: " << next_req.data.size() << "\r\n";
 
-    if (plain_http) {
-        data
-            << "Connection: Keep-Alive" "\r\n"
-            << "Host: " << host << ":" << port << "\r\n"
-            << "User-Agent: " USER_AGENT "\r\n"
-            << "X-Line-Application: " APPLICATION_NAME "\r\n"
-            << "X-Line-Access: " << auth_token << "\r\n";
-    } else if (first_request) {
+    if (ls_mode) {
         if (x_ls.size() > 0)
             data << "X-LS: " << x_ls << "\r\n";
 
+        if (first_request) {
+            data
+                << "Connection: Keep-Alive" "\r\n"
+                << "Content-Type: application/x-thrift" "\r\n"
+                << "Host: " << host << ":" << port << "\r\n"
+                << "Accept: application/x-thrift" "\r\n"
+                << "User-Agent: " USER_AGENT "\r\n"
+                << "X-Line-Application: " APPLICATION_NAME "\r\n"
+                << "X-Line-Access: " << auth_token << "\r\n";
+        }
+
+        first_request = false;
+    } else {
         data
             << "Connection: Keep-Alive" "\r\n"
-            << "Content-Type: application/x-thrift" "\r\n"
             << "Host: " << host << ":" << port << "\r\n"
-            << "Accept: application/x-thrift" "\r\n"
             << "User-Agent: " USER_AGENT "\r\n"
             << "X-Line-Application: " APPLICATION_NAME "\r\n"
             << "X-Line-Access: " << auth_token << "\r\n";
-
-        first_request = false;
     }
 
     data

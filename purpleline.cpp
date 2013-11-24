@@ -7,7 +7,7 @@
 #include "purpleline.hpp"
 
 static const char *LINE_GROUP = "LINE";
-static const char *LINE_TEMP_GROUP = "LINE Temporary Contacts";
+static const char *LINE_TEMP_GROUP = "LINE Temporary";
 
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     conn(conn),
@@ -16,7 +16,7 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
 {
     c_out = boost::make_shared<ThriftClient>(acct, conn, "/S4");
     c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
-    http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, true);
+    http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, false);
 }
 
 PurpleLine::~PurpleLine() {
@@ -29,20 +29,70 @@ const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
 }
 
 GList *PurpleLine::status_types(PurpleAccount *) {
+    const char *attr_id = "message", *attr_name = "What's Up?";
+
     GList *types = nullptr;
     PurpleStatusType *t;
 
-    t = purple_status_type_new_full(PURPLE_STATUS_AVAILABLE, nullptr, nullptr, TRUE, TRUE, FALSE);
+    // Friends
+    t = purple_status_type_new_with_attrs(
+        PURPLE_STATUS_AVAILABLE, nullptr, nullptr,
+        TRUE, TRUE, FALSE,
+        attr_id, attr_name, purple_value_new(PURPLE_TYPE_STRING),
+        nullptr);
     types = g_list_append(types, t);
 
-    t = purple_status_type_new_full(PURPLE_STATUS_OFFLINE, nullptr, nullptr, TRUE, TRUE, FALSE);
+    // Temporary friends
+    t = purple_status_type_new_with_attrs(
+        PURPLE_STATUS_UNAVAILABLE, "temporary", "Temporary",
+        TRUE, TRUE, FALSE,
+        attr_id, attr_name, purple_value_new(PURPLE_TYPE_STRING),
+        nullptr);
+    types = g_list_append(types, t);
+
+    // Not actually used because LINE doesn't report online status, but this is apparently required.
+    t = purple_status_type_new_with_attrs(
+        PURPLE_STATUS_OFFLINE, nullptr, nullptr,
+        TRUE, TRUE, FALSE,
+        attr_id, attr_name, purple_value_new(PURPLE_TYPE_STRING),
+        nullptr);
     types = g_list_append(types, t);
 
     return types;
 }
 
 char *PurpleLine::get_chat_name(GHashTable *components) {
-    return (char *)g_hash_table_lookup(components, (gconstpointer)"id");
+    return g_strdup((char *)g_hash_table_lookup(components, (gconstpointer)"id"));
+}
+
+char *PurpleLine::status_text(PurpleBuddy *buddy) {
+    PurplePresence *presence = purple_buddy_get_presence(buddy);
+    PurpleStatus *status = purple_presence_get_active_status(presence);
+
+    const char *msg = purple_status_get_attr_string(status, "message");
+    if (msg && msg[0])
+        return g_markup_escape_text(msg, -1);
+
+    return nullptr;
+}
+
+void PurpleLine::tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full) {
+    purple_notify_user_info_add_pair_plaintext(user_info,
+        "Name", purple_buddy_get_alias(buddy));
+
+    //purple_notify_user_info_add_pair_plaintext(user_info,
+    //    "User ID", purple_buddy_get_name(buddy));
+
+    if (purple_blist_node_get_bool(PURPLE_BLIST_NODE(buddy), "official_account"))
+        purple_notify_user_info_add_pair_plaintext(user_info, "Official account", "Yes");
+
+    if (PURPLE_BLIST_NODE_HAS_FLAG(buddy, PURPLE_BLIST_NODE_FLAG_NO_SAVE)) {
+        purple_notify_user_info_add_section_break(user_info);
+        purple_notify_user_info_add_pair_plaintext(user_info,
+            "Temporary",
+            "You are currently in a conversation with this user, "
+                "but they are not on your friend list.");
+    }
 }
 
 void PurpleLine::login(PurpleAccount *acct) {
@@ -165,18 +215,23 @@ void PurpleLine::get_contacts() {
             c_out->recv_getContacts(contacts);
 
             for (line::Contact &contact: contacts) {
-                if (contact.status == line::ContactStatus::FRIEND) {
-                    blist_ensure_buddy(contact.mid.c_str(), contact.displayName.c_str());
-
+                if (contact.status == line::ContactStatus::FRIEND)
                     blist_update_buddy(contact);
-                }
             }
 
+            // TODO: Remove buddies that are no longer contacts
+
             {
-                // Add self as buddy for those longely debugging conversations
+                // Add self as buddy for those lonely debugging conversations
                 // TODO: Remove
 
-                blist_ensure_buddy(profile.mid.c_str(), profile.displayName.c_str());
+                line::Contact self;
+                self.mid = profile.mid;
+                self.displayName = profile.displayName + " [Profile]";
+                self.statusMessage = profile.statusMessage;
+                self.picturePath = profile.picturePath;
+
+                blist_update_buddy(self);
             }
 
             get_groups();
@@ -264,7 +319,6 @@ void PurpleLine::fetch_operations() {
                     break;
 
                 case line::OperationType::ADD_CONTACT:
-                    blist_ensure_buddy(op.param1, op.param1);
                     blist_update_buddy(op.param1);
                     break;
 
@@ -419,15 +473,15 @@ PurpleChat *PurpleLine::blist_find_chat_by_id(std::string gid) {
     return nullptr;
 }
 
-PurpleGroup *PurpleLine::blist_ensure_group(std::string group_name) {
+PurpleGroup *PurpleLine::blist_ensure_group(std::string group_name, bool temporary) {
     PurpleGroup *group = purple_find_group(group_name.c_str());
     if (!group) {
         group = purple_group_new(group_name.c_str());
         purple_blist_add_group(group, nullptr);
 
-        if (group_name == LINE_TEMP_GROUP) {
-            purple_blist_node_set_flags(&group->node, PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-            purple_blist_node_set_bool(&group->node, "collapsed", TRUE);
+        if (temporary) {
+            purple_blist_node_set_flags(PURPLE_BLIST_NODE(group), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+            purple_blist_node_set_bool(PURPLE_BLIST_NODE(group), "collapsed", TRUE);
         }
     }
 
@@ -436,7 +490,7 @@ PurpleGroup *PurpleLine::blist_ensure_group(std::string group_name) {
 
 // Ensures buddy exists on buddy list so their name shows up correctly. Will create temporary
 // buddies if needed.
-PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, std::string displayName, bool temporary) {
+PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, bool temporary) {
     PurpleBuddy *buddy = purple_find_buddy(acct, uid.c_str());
     if (buddy) {
         int flags = purple_blist_node_get_flags(&buddy->node);
@@ -452,24 +506,24 @@ PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, std::string display
                 purple_blist_add_buddy(buddy, nullptr, blist_ensure_group(LINE_GROUP), nullptr);
         }
     } else {
-        buddy = purple_buddy_new(acct, uid.c_str(), displayName.c_str());
+        buddy = purple_buddy_new(acct, uid.c_str(), uid.c_str());
 
         purple_blist_add_buddy(
             buddy,
             nullptr,
-            blist_ensure_group(temporary ? LINE_TEMP_GROUP : LINE_GROUP),
+            blist_ensure_group(temporary ? LINE_TEMP_GROUP : LINE_GROUP, temporary),
             nullptr);
 
         if (temporary)
             purple_blist_node_set_flags(&buddy->node, PURPLE_BLIST_NODE_FLAG_NO_SAVE);
     }
-
-    // Mark actual friends as online
-    if (!temporary) {
+    // Mark temporary friends as temporary. blist_update_buddy will mark actual friends as
+    // available.
+    if (temporary) {
         purple_prpl_got_user_status(
             acct,
             uid.c_str(),
-            purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
+            "temporary",
             nullptr);
     }
 
@@ -477,20 +531,23 @@ PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, std::string display
 }
 
 // Fetch information for contact and call the other update_buddy
-void PurpleLine::blist_update_buddy(std::string uid) {
+void PurpleLine::blist_update_buddy(std::string uid, bool temporary) {
+    // Put buddy on list already so it shows up as loading
+    blist_ensure_buddy(uid.c_str(), temporary);
+
     c_out->send_getContacts(std::vector<std::string> { uid });
-    c_out->send([this]{
+    c_out->send([this, temporary]{
         std::vector<line::Contact> contacts;
         c_out->recv_getContacts(contacts);
 
         if (contacts.size() == 1)
-            blist_update_buddy(contacts[0]);
+            blist_update_buddy(contacts[0], temporary);
     });
 }
 
 // Updates buddy details such as alias, icon, status message
-void PurpleLine::blist_update_buddy(line::Contact contact) {
-    PurpleBuddy *buddy = purple_find_buddy(acct, contact.mid.c_str());
+void PurpleLine::blist_update_buddy(line::Contact contact, bool temporary) {
+    PurpleBuddy *buddy = blist_ensure_buddy(contact.mid.c_str(), temporary);
     if (!buddy) {
         purple_debug_warning("line", "Tried to update a non-existent buddy %s\n",
             contact.mid.c_str());
@@ -523,7 +580,20 @@ void PurpleLine::blist_update_buddy(line::Contact contact) {
         // TODO: delete icon if any
     }
 
-    // TODO: status message
+    // Mark actual friends as available.
+    if (!temporary) {
+        purple_prpl_got_user_status(
+            acct,
+            contact.mid.c_str(),
+            purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
+            "message", contact.statusMessage.c_str(),
+            nullptr);
+    }
+
+    if (contact.attributes & 32)
+        purple_blist_node_set_bool(PURPLE_BLIST_NODE(buddy), "official_account", TRUE);
+    else
+        purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), "official_account");
 }
 
 bool PurpleLine::blist_is_buddy_in_any_conversation(std::string uid) {
@@ -568,10 +638,15 @@ void PurpleLine::blist_remove_buddy(std::string uid) {
 
         purple_blist_add_buddy(buddy, nullptr, blist_ensure_group(LINE_TEMP_GROUP), nullptr);
 
+        // Get current status text to preserve it
+        PurplePresence *presence = purple_buddy_get_presence(buddy);
+        PurpleStatus *status = purple_presence_get_active_status(presence);
+
         purple_prpl_got_user_status(
             acct,
             uid.c_str(),
-            purple_primitive_get_id_from_type(PURPLE_STATUS_OFFLINE),
+            "temporary",
+            "message", purple_status_get_attr_string(status, "message"),
             nullptr);
     } else {
         // Otherwise, delete them.
@@ -586,8 +661,7 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group)
     GList *users = NULL, *flags = NULL;
 
     for (line::Contact &c: group.members) {
-        blist_ensure_buddy(c.mid, c.displayName, true);
-        blist_update_buddy(c);
+        blist_update_buddy(c, true);
 
         int cbflags = 0;
 
@@ -599,8 +673,7 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group)
     }
 
     for (line::Contact &c: group.invitee) {
-        blist_ensure_buddy(c.mid, c.displayName, true);
-        blist_update_buddy(c);
+        blist_update_buddy(c, true);
 
         users = g_list_prepend(users, (gpointer)c.mid.c_str());
         flags = g_list_prepend(flags, GINT_TO_POINTER(PURPLE_CBFLAGS_AWAY));
@@ -715,7 +788,7 @@ LineHttpTransport *ThriftProtocol::getTransport() {
 ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
     : line::LineClientT<ThriftProtocol>(
         boost::make_shared<ThriftProtocol>(
-            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, false))),
+            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, true))),
     path(path)
 {
     http = piprot_->getTransport();

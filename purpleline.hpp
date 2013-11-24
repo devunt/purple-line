@@ -39,6 +39,7 @@ class PurpleLine {
 
     std::deque<std::string> recent_messages;
 
+    // Latest information about each seen group
     std::map<std::string, line::Group> group_map;
 
 public:
@@ -49,6 +50,8 @@ public:
     static const char *list_icon(PurpleAccount *, PurpleBuddy *buddy);
     static GList *status_types(PurpleAccount *);
     static char *get_chat_name(GHashTable *components);
+    static char *status_text(PurpleBuddy *buddy);
+    static void tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full);
     static void login(PurpleAccount *acct);
 
     void close();
@@ -71,10 +74,10 @@ private:
     void handle_message(line::Message &msg, bool sent, bool replay);
 
     PurpleChat *blist_find_chat_by_id(std::string id);
-    PurpleGroup *blist_ensure_group(std::string group_name);
-    PurpleBuddy *blist_ensure_buddy(std::string uid, std::string displayName, bool temporary=false);
-    void blist_update_buddy(std::string uid);
-    void blist_update_buddy(line::Contact contact);
+    PurpleGroup *blist_ensure_group(std::string group_name, bool temporary=false);
+    PurpleBuddy *blist_ensure_buddy(std::string uid, bool temporary=false);
+    void blist_update_buddy(std::string uid, bool temporary=false);
+    void blist_update_buddy(line::Contact contact, bool temporary=false);
     bool blist_is_buddy_in_any_conversation(std::string uid);
     void blist_remove_buddy(std::string uid);
 

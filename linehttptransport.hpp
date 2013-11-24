@@ -31,7 +31,7 @@ class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     std::string host;
     uint16_t port;
-    bool plain_http;
+    bool ls_mode;
     std::string auth_token;
     std::string x_ls;
 
