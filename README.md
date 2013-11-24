@@ -16,14 +16,17 @@ Implemented
 * Talking in groups
 * Group member list
 * Fetching recent messages when opening a group chat
+* Synchronize buddy list on the fly
+  * Add/block implemented as add/remove
+* Buddy icons
+* Account icon
 
 To do
 -----
 
 * Handle exceptions from all thrift methods (especially AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE)
-* Friend icons
 * Changing your own icon
-* Synchronize profile/buddy list on the fly
+* Synchronize groups on the fly
 * Add friends
 * Remove friend
 * Create groups
