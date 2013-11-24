@@ -68,9 +68,12 @@ obtained via the login procedure.
 Object storage server
 ---------------------
 
-Message attachment files are stored on a separate server at https://os.line.naver.jp/ which is
-internally referred to as the "object storage server". It serves files via HTTPS with the same
-authentication protocol as above.
+Media files are stored on a separate server at http://os.line.naver.jp/ which is internally referred
+to as the "object storage server". Some files (such as message attachments) seem to require
+authentication with the same protocol as above, but some files (such as buddy icons) don't seem to
+require authentication.
+
+It serves files over both HTTP and HTTPS with the same authentication protocol as above.
 
 Login procedure
 ---------------
@@ -176,7 +179,7 @@ TODO: make a list of emoji
 Image message content can be delivered in one of two ways.
 
 For normal image messages, a preview image is included as a plain JPEG in the contentPreview field.
-However, for some reason the official desktop client seems to ignore id, and rather downloads
+However, for some reason the official desktop client seems to ignore it and rather downloads
 everything from the object storage server.
 
 The preview image URLs are http://os.line.naver.jp/os/m/MSGID/preview and the full-size image URL
@@ -264,7 +267,8 @@ Informs that another user has read (seen) messages sent by the current user.
 
 Informs that the client should refresh its "settings" using getSettingsAttributes()
 
-* param1 = (mystery - seen "1024", "8192")
+* param1 = (mystery - seen "1024", "8192", "32768")
+* param2 = (mystery - seen "en")
 
 ### SEND_CHAT_CHECKED (40)
 
@@ -274,4 +278,4 @@ Seems to be sent when the "hidden" setting of the contact changes. This causes t
 re-request data about the contact with getContact() (singular!).
 
 * param1 = ID of the contact that was changed
-* param2 = (mystery - seen "4")
+* param2 = (mystery - seen "4", "16")

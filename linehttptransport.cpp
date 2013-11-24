@@ -7,17 +7,24 @@
 
 #include <thrift/transport/TTransportException.h>
 
+#define USER_AGENT "purple-line (LINE for libpurple/Pidgin/Finch)"
+#define APPLICATION_NAME "DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64"
+
 LineHttpTransport::LineHttpTransport(
         PurpleAccount *acct,
         PurpleConnection *conn,
-        std::string host) :
+        std::string host,
+        uint16_t port,
+        bool plain_http) :
     acct(acct),
     conn(conn),
     host(host),
-    port(443),
+    port(port),
+    plain_http(plain_http),
     auth_token("x"),
     ssl(NULL),
     connection_id(0),
+    connection_close(false),
     status_code_(0),
     content_length_(0)
 {
@@ -78,8 +85,9 @@ void LineHttpTransport::write_virt(const uint8_t *buf, uint32_t len) {
     request_buf.sputn((const char *)buf, len);
 }
 
-void LineHttpTransport::send(std::string path, std::function<void()> callback) {
+void LineHttpTransport::request(std::string method, std::string path, std::function<void()> callback) {
     Request req;
+    req.method = method;
     req.path = path;
     req.data = request_buf.str();
     req.callback = callback;
@@ -105,6 +113,7 @@ void LineHttpTransport::send_next() {
     if (in_progress || request_queue.empty())
         return;
 
+    connection_close = false;
     status_code_ = -1;
     content_length_ = -1;
 
@@ -113,20 +122,29 @@ void LineHttpTransport::send_next() {
     std::ostringstream data;
 
     data
-        << "POST " << next_req.path << " HTTP/1.1" "\r\n"
-        << "Content-Length: " << next_req.data.size() << "\r\n";
+        << next_req.method << " " << next_req.path << " HTTP/1.1" "\r\n";
 
-    if (x_ls.size() > 0)
-        data << "X-LS: " << x_ls << "\r\n";
+    if (next_req.method == "POST")
+        data << "Content-Length: " << next_req.data.size() << "\r\n";
 
-    if (first_request) {
+    if (plain_http) {
+        data
+            << "Connection: Keep-Alive" "\r\n"
+            << "Host: " << host << ":" << port << "\r\n"
+            << "User-Agent: " USER_AGENT "\r\n"
+            << "X-Line-Application: " APPLICATION_NAME "\r\n"
+            << "X-Line-Access: " << auth_token << "\r\n";
+    } else if (first_request) {
+        if (x_ls.size() > 0)
+            data << "X-LS: " << x_ls << "\r\n";
+
         data
             << "Connection: Keep-Alive" "\r\n"
             << "Content-Type: application/x-thrift" "\r\n"
             << "Host: " << host << ":" << port << "\r\n"
             << "Accept: application/x-thrift" "\r\n"
-            << "User-Agent: purple-line (LINE for libpurple)" "\r\n"
-            << "X-Line-Application: DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64" "\r\n"
+            << "User-Agent: " USER_AGENT "\r\n"
+            << "X-Line-Application: " APPLICATION_NAME "\r\n"
             << "X-Line-Access: " << auth_token << "\r\n";
 
         first_request = false;
@@ -186,7 +204,6 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
             }
 
             return;
-            return;
         }
 
         if (count == (size_t)-1)
@@ -221,6 +238,12 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
 
             if (connection_id != connection_id_before)
                 break; // Callback closed connection, don't try to continue reading
+
+            if (connection_close) {
+                close();
+                send_next();
+                break;
+            }
 
             send_next();
         }
@@ -257,6 +280,14 @@ void LineHttpTransport::try_parse_response_header() {
 
         if (name == "X-LS")
             std::getline(stream, x_ls, '\r');
+
+        if (name == "Connection") {
+            std::string value;
+            std::getline(stream, value, '\r');
+
+            if (value == "Close" || value == "close")
+                connection_close = true;
+        }
 
         stream.ignore(256, '\n');
     }

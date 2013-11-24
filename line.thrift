@@ -194,10 +194,11 @@ struct Profile {
     20: string displayName;
     21: string phoneticName;
     22: string pictureStatus;
-    23: string thumbnailUrl;
+    //23: string thumbnailUrl; // This is probably an old field.
     24: string statusMessage;
     31: bool allowSearchByUserid;
     32: bool allowSearchByEmail;
+    33: string thumbnailUrl;
 }
 
 // en.class

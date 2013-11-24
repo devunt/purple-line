@@ -18,6 +18,7 @@ class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     class Request {
     public:
+        std::string method;
         std::string path;
         std::string data;
         std::function<void()> callback;
@@ -30,6 +31,7 @@ class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     std::string host;
     uint16_t port;
+    bool plain_http;
     std::string auth_token;
     std::string x_ls;
 
@@ -47,12 +49,15 @@ class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     std::queue<Request> request_queue;
 
+    bool connection_close;
     int status_code_;
     int content_length_;
 
 public:
 
-    LineHttpTransport(PurpleAccount *acct, PurpleConnection *conn, std::string host);
+    LineHttpTransport(PurpleAccount *acct, PurpleConnection *conn,
+        std::string host, uint16_t port,
+        bool plain_http);
     ~LineHttpTransport();
 
     void set_auth_token(std::string token);
@@ -63,7 +68,7 @@ public:
     virtual uint32_t read_virt(uint8_t *buf, uint32_t len);
     void write_virt(const uint8_t *buf, uint32_t len);
 
-    void send(std::string path, std::function<void()> callback);
+    void request(std::string method, std::string path, std::function<void()> callback);
     int status_code();
     int content_length();
 

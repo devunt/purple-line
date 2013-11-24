@@ -28,6 +28,7 @@ class PurpleLine {
     PurpleAccount *acct;
 
     boost::shared_ptr<ThriftClient> c_out, c_in;
+    boost::shared_ptr<LineHttpTransport> http_os;
 
     line::Profile profile;
     int64_t local_rev;
@@ -58,8 +59,6 @@ public:
 
 private:
 
-    PurpleChat *find_chat_by_id(std::string id);
-
     // Login process methods, executed in this this order
     void start_login();
     void get_last_op_revision();
@@ -71,7 +70,14 @@ private:
     void fetch_operations();
     void handle_message(line::Message &msg, bool sent, bool replay);
 
-    void ensure_buddy_exists(std::string uid, std::string displayName);
+    PurpleChat *blist_find_chat_by_id(std::string id);
+    PurpleGroup *blist_ensure_group(std::string group_name);
+    PurpleBuddy *blist_ensure_buddy(std::string uid, std::string displayName, bool temporary=false);
+    void blist_update_buddy(std::string uid);
+    void blist_update_buddy(line::Contact contact);
+    bool blist_is_buddy_in_any_conversation(std::string uid);
+    void blist_remove_buddy(std::string uid);
+
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
     void push_recent_message(std::string id);
