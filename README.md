@@ -10,7 +10,7 @@ Screen shot
 
 Here's Pidgin logged in to LINE. The plugin is still at an early stage, so simple IM and group chats is all it can do for the moment.
 
-![Screenshot](http://virkkunen.net/b/pidgin-line.png)
+![Screenshot](http://virkkunen.net/b/pidgin-line2.png)
 
 Implemented
 -----------
