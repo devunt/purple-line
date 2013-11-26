@@ -5,6 +5,13 @@ libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.naver.jp/en/) by
 
 The LINE protocol is closed, proprietary and there is no public API nor a truly cross-platform client (how lame!), so this repository shall also serve as unofficial documentation for the LINE protocol.
 
+Screen shot
+-----------
+
+Here's Pidgin logged in to LINE. The plugin is still at an early stage, so simple IM and group chats is all it can do for the moment.
+
+![Screenshot](http://virkkunen.net/b/pidgin-line.png)
+
 Implemented
 -----------
 
