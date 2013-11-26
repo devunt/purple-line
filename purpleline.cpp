@@ -131,14 +131,14 @@ void PurpleLine::start_login() {
         true,
         "127.0.0.1",
         "libpurple",
-        line::IdentityProvider::LINE,
+        line::Provider::LINE,
         "");
     c_out->send([this]() {
         line::LoginResult result;
 
         try {
             c_out->recv_loginWithIdentityCredentialForCertificate(result);
-        } catch (line::Error &err) {
+        } catch (line::TalkException &err) {
             std::string msg = "Could not log in. " + err.reason;
 
             purple_connection_error(
@@ -376,7 +376,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
         flags |= PURPLE_MESSAGE_SEND;
 
-        if (msg.toType == line::MessageToType::USER) {
+        if (msg.toType == line::ToType::USER) {
             PurpleConversation *conv = purple_find_conversation_with_account(
                 PURPLE_CONV_TYPE_IM,
                 msg.to.c_str(),
@@ -390,7 +390,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                     (PurpleMessageFlags)flags,
                     mtime);
             }
-        } else if (msg.toType == line::MessageToType::GROUP) {
+        } else if (msg.toType == line::ToType::GROUP) {
             PurpleConversation *conv = purple_find_chat(conn, chat_id_to_purple_id[msg.to]);
 
             if (conv) {
@@ -407,7 +407,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
         flags |= PURPLE_MESSAGE_RECV;
 
-        if (msg.toType == line::MessageToType::USER) {
+        if (msg.toType == line::ToType::USER) {
             if (msg.to != profile.mid) {
                 purple_debug_warning("line", "Got message meant for some other user...?");
                 return;
@@ -419,7 +419,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                 text.c_str(),
                 (PurpleMessageFlags)flags,
                 mtime);
-        } else if (msg.toType == line::MessageToType::GROUP) {
+        } else if (msg.toType == line::ToType::GROUP) {
             int purple_id = chat_id_to_purple_id[msg.to];
 
             if (!purple_id)
@@ -753,7 +753,7 @@ int PurpleLine::send_message(std::string to, int chat_purple_id, std::string tex
 
         try {
             c_out->recv_sendMessage(msg_back);
-        } catch (line::Error &err) {
+        } catch (line::TalkException &err) {
             PurpleConversation *conv = nullptr;
 
             if (chat_purple_id) {

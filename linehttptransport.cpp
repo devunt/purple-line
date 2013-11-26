@@ -235,9 +235,9 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
 
             try {
                 request_queue.front().callback();
-            } catch (line::Error &err) {
+            } catch (line::TalkException &err) {
                 switch (err.code) {
-                    case line::ErrorCode::NOT_AUTHORIZED_DEVICE:
+                    case line::TalkExceptionCode::NOT_AUTHORIZED_DEVICE:
                         if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
                             conn->wants_to_die = TRUE;
                             purple_connection_error(conn,

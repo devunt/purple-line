@@ -4,7 +4,7 @@ namespace cpp line
 
 // :%s/.*"\([^"]*\)", \d\+, \(\d\+\).*/\1 = \2;/
 
-enum ErrorCode {
+enum TalkExceptionCode {
     ILLEGAL_ARGUMENT = 0;
     AUTHENTICATION_FAILED = 1;
     DB_FAILED = 2;
@@ -58,8 +58,8 @@ enum ErrorCode {
     NOT_AVAILABLE_PIN_CODE_SESSION = 51;
 }
 
-exception Error {
-    1: ErrorCode code;
+exception TalkException {
+    1: TalkExceptionCode code;
     2: string reason;
     3: map<string, string> parameterMap;
 }
@@ -72,7 +72,7 @@ struct Location {
     5: string phone;
 }
 
-enum MessageToType {
+enum ToType {
     USER = 0;
     ROOM = 1;
     GROUP = 2;
@@ -96,7 +96,7 @@ enum ContentType {
 struct Message {
     1: string from;
     2: string to;
-    3: MessageToType toType;
+    3: ToType toType;
     4: string id;
     5: i64 createdTime;
     6: i64 deliveredTime;
@@ -189,7 +189,7 @@ struct Operation {
 }
 
 // ew.class
-enum IdentityProvider {
+enum Provider {
     UNKNOWN = 0;
     LINE = 1;
     NAVER_KR = 2;
@@ -286,45 +286,37 @@ service Line {
         5: bool keepLoggedIn,
         6: string accessLocation,
         7: string systemName,
-        8: IdentityProvider identityProvider,
-        9: string certificate) throws (1: Error e);
+        8: Provider identityProvider,
+        9: string certificate) throws (1: TalkException e);
 
     // Gets current user's profile
-    Profile getProfile() throws (1: Error e);
+    Profile getProfile() throws (1: TalkException e);
 
     // Gets list of current user's contact IDs
-    list<string> getAllContactIds() throws (1: Error e);
+    list<string> getAllContactIds() throws (1: TalkException e);
 
     // Gets list of current user's recommended contacts IDs
-    list<string> getRecommendationIds() throws (1: Error e);
+    list<string> getRecommendationIds() throws (1: TalkException e);
 
     // Gets detailed information on contacts
-    list<Contact> getContacts(2: list<string> ids);
+    list<Contact> getContacts(2: list<string> ids) throws (1: TalkException e);
 
-    Contact findAndAddContactsByMid(1: i32 reqSeq, 2: string mid) throws (1: Error e);
+    Contact findAndAddContactsByMid(1: i32 reqSeq, 2: string mid) throws (1: TalkException e);
 
     // Gets list of current user's joined groups
-    list<string> getGroupIdsJoined() throws (1: Error e);
+    list<string> getGroupIdsJoined() throws (1: TalkException e);
 
-    list<Group> getGroups(2: list<string> ids) throws (1: Error e);
+    list<Group> getGroups(2: list<string> ids) throws (1: TalkException e);
 
     // Get recent messages from a group chat (n.b. arg names guessed)
-    list<Message> getRecentMessages(2: string gid, 3: i32 count) throws (1: Error e);
+    list<Message> getRecentMessages(2: string gid, 3: i32 count) throws (1: TalkException e);
 
     // Returns incoming events
-    list<Operation> fetchOperations(2: i64 localRev, 3: i32 count) throws (1: Error e);
-
-    // Newer function for getting incoming events? Not used by desktop client, but exists in at
-    // least Android client.
-    list<Operation> fetchOps(
-        2: i64 localRev,
-        3: i32 count,
-        4: i64 globalRev,
-        5: i64 individualRev)
+    list<Operation> fetchOperations(2: i64 localRev, 3: i32 count) throws (1: TalkException e);
 
     // Returns current revision ID for use with fetchOperations
-    i64 getLastOpRevision() throws (1: Error e);
+    i64 getLastOpRevision() throws (1: TalkException e);
 
     // Sends a message to chat or user
-    Message sendMessage(1: i32 seq, 2: Message message) throws (1: Error e);
+    Message sendMessage(1: i32 seq, 2: Message message) throws (1: TalkException e);
 }
