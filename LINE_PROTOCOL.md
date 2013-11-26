@@ -24,7 +24,7 @@ Encryption is required.
 If using a keep-alive connection (and you should be), headers from the first request can be
 persisted. Headers in following requests temporarily override the persisted value. A mystery
 header called X-LS apparently has something to do with this. If you want to persist headers, you
-must remember and X-LS header value the server sends you and send it back in the next request. The
+must remember the X-LS header value the server sends you and send it back in the next request. The
 values seem to be integers. (Could LS be short for "Line Session"?)
 
 Using persistent headers it's possible to send each request with just two headers - X-LS and
