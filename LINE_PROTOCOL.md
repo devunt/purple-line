@@ -3,7 +3,7 @@ Naver LINE protocol
 
 Matti Virkkunen <mvirkkunen@gmail.com>
 
-Document is accurate as of 2013-11-23.
+Document is accurate as of 2013-11-28.
 
 This unofficial document describes the LINE (by Naver / NHN Japan) instant messenger protocol.
 Observations are based mostly on monitoring the desktop Windows client's traffic (under Wine), and
@@ -14,7 +14,11 @@ Also, it's not nearly finished yet.
 Wire protocol
 -------------
 
-Attachment: line.thrift
+File: line.thrift (things used by the desktop client)
+
+File: line-talk-full.thrift (full Thrift interface from the Android client)
+
+The files have some overlap.
 
 Apache Thrift TCompactProtocol via HTTPS to gd2.line.naver.jp:443. The path is /S4 for most
 messages, /P4 is used to get a long poll connection for fetchOperations.
@@ -144,6 +148,25 @@ Gets all groups current user is a member of.
 
 Gets details for the groups. This included member lists.
 
+Managing the contact list
+-------------------------
+
+Contacts have multiple statuses.
+
+FRIEND = appears on friend list, unless hidden.
+
+RECOMMEND = appears on "recommended contacts" list.
+
+DELETE = used in notifications only AFAIK, to notify that a friend has been completely deleted.
+
+Each state also has a _BLOCKED version where the current user will not receive messages from the
+user. Friends also have a "hidden" status, that is set via the CONTACT_SETTING_CONTACT_HIDE setting
+flag. Blocking is done via blockContact/unblockContact.
+
+There is no separate function to delete a contact for some reason, instead it's done by setting the
+CONTACT_SETTING_DELETE setting. Even though it's a setting, this is equivalent to really deleting
+the friend - they won't appear on getallContactIds() anymore. (FIXME: actually test this...)
+
 IM conversations
 ----------------
 
@@ -215,6 +238,10 @@ The official client uses a count parameter of 50.
 Operation data is contained either as a Message object in the message field, or in the string fields
 param1-param3.
 
+In general NOTIFIED_* messages notify the current user about other users' actions, while their
+non-NOTIFIED counterparts notify the current user about their own actions, in order to sync them
+across devices.
+
 The following is a list of operation types.
 
 ### END_OF_OPERATION (0)
@@ -224,22 +251,46 @@ out due to the count param. This message contains no data, not even a revision n
 
 ### UPDATE_PROFILE (1)
 
-Informs that the client should refresh its profile using getProfile()
+The current user updated their profile. Refresh using getProfile().
 
-* param1 = (mystery - seen "32")
+* param1 = UpdateProfileAttributeAttr, which property was changed (possibly bitfield)
+
+### NOTIFIED_UPDATE_PROFILE (2)
+
+Another user updated their profile. Refresh using getContact[s]().
+
+* param1 = the user ID
+* param2 = UpdateProfileAttributeAttr, which property was changed (possibly bitfield)
+
+### REGISTER_USERID (3)
+
+(Mystery)
 
 ### ADD_CONTACT (4)
 
-Informs that the current user has added a contact as a friend.
+The current user has added a contact as a friend.
 
 * param1 = ID of the user that was added
 * param2 = (mystery - seen "0")
 
+### NOTIFIED_ADD_CONTACT (5)
+
+Another user has added the current user as a friend.
+
+* param1 = ID of the user that added the current user
+
 ### BLOCK_CONTACT (6)
 
-Informs that the current user has blocked a contact (removed from friends).
+The current user has blocked a contact.
 
-* param1 = ID of the user that was removed
+* param1 = ID of the user that was blocked
+* param2 = (mystery, seen "NORMAL")
+
+### UNBLOCK_CONTACT (7)
+
+The current user has unblocked a contact.
+
+* param1 = ID of the user that was unblocked
 * param2 = (mystery, seen "NORMAL")
 
 ### SEND_MESSAGE (25)
@@ -265,17 +316,17 @@ Informs that another user has read (seen) messages sent by the current user.
 
 ### UPDATE_SETTINGS (36)
 
-Informs that the client should refresh its "settings" using getSettingsAttributes()
+User settings have changed. Refresh with getSettingsAttributes() or getSettings()
 
-* param1 = (mystery - seen "1024", "8192", "32768")
-* param2 = (mystery - seen "en")
+* param1 = probably bitfield of changed properties
+* param2 = probably new value of property (seem things like "bF"/"bT" for a boolean attribute)
 
 ### SEND_CHAT_CHECKED (40)
 
 ### UPDATE_CONTACT (49)
 
-Informs that the client should refresh a contact. The desktop client uses the singular getContact()
-for this instead of the list version.
+The current user's settings (e.g. hidden status) for a contact has changed. Refresh with
+getContact[s]().
 
-* param1 = ID of the contact that was changed
-* param2 = (mystery - seen "4", "16")
+* param1 = ID of the user that changed
+* param2 = probably bitfield of changed properties
