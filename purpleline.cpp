@@ -111,14 +111,14 @@ void PurpleLine::close() {
     delete this;
 }
 
-static struct proto_chat_entry id_chat_entry {
-    .label = "Group _Name",
-    .identifier = "name",
-    .required = TRUE,
-};
-
 GList *PurpleLine::chat_info() {
-    return g_list_append(nullptr, g_memdup(&id_chat_entry, sizeof(struct proto_chat_entry)));
+    struct proto_chat_entry *entry = g_new0(struct proto_chat_entry, 1);
+
+    entry->label = "Group _Name";
+    entry->identifier = "name",
+    entry->required = TRUE;
+
+    return g_list_append(nullptr, entry);
 }
 
 void PurpleLine::start_login() {
