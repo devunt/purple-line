@@ -95,6 +95,7 @@ private:
     void get_contacts();
     void get_groups();
     void get_rooms();
+    void update_rooms(line::MessageBoxCompactWrapUpList wrap_up_list);
 
     // Long poll return channel
     void fetch_operations();
@@ -140,6 +141,7 @@ private:
     PurpleChat *blist_update_chat(line::Room &room);
     void blist_remove_chat(std::string id, ChatType type);
 
+    std::string get_room_display_name(line::Room &room);
     void set_chat_participants(PurpleConvChat *chat, line::Room &room);
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 

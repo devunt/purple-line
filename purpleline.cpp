@@ -279,7 +279,6 @@ void PurpleLine::get_rooms() {
         c_out->recv_getMessageBoxCompactWrapUpList(wrap_up_list);
 
         std::set<std::string> uids;
-        std::set<PurpleChat *> chats_to_delete = blist_find_chats_by_type(ChatType::ROOM);
 
         for (line::MessageBoxEntry &ent: wrap_up_list.entries) {
             if (ent.messageBox.midType != line::ToType::ROOM)
@@ -287,37 +286,49 @@ void PurpleLine::get_rooms() {
 
             for (line::Contact &c: ent.contacts)
                 uids.insert(c.mid);
-
-            line::Room room;
-            room.mid = ent.messageBox.id;
-            room.contacts = ent.contacts;
-
-            chats_to_delete.erase(blist_update_chat(room));
         }
 
-        for (PurpleChat *chat: chats_to_delete)
-            purple_blist_remove_chat(chat);
-
         if (!uids.empty()) {
+            // Room contacts don't contain full contact information, so pull separately to get names
+
             c_out->send_getContacts(std::vector<std::string>(uids.begin(), uids.end()));
-            c_out->send([this]{
+            c_out->send([this, wrap_up_list]{
                 std::vector<line::Contact> contacts;
                 c_out->recv_getContacts(contacts);
 
                 for (line::Contact &c: contacts)
                     this->contacts[c.mid] = c;
 
-                //for (line::Contact &c: contacts)
-                //    blist_update_buddy(c, true);
+                update_rooms(wrap_up_list);
             });
+        } else {
+            update_rooms(wrap_up_list);
         }
-
-        // Start up return channel
-        fetch_operations();
-
-        purple_connection_set_state(conn, PURPLE_CONNECTED);
-        purple_connection_update_progress(conn, "Connected", 2, 3);
     });
+}
+
+void PurpleLine::update_rooms(line::MessageBoxCompactWrapUpList wrap_up_list) {
+    std::set<PurpleChat *> chats_to_delete = blist_find_chats_by_type(ChatType::ROOM);
+
+    for (line::MessageBoxEntry &ent: wrap_up_list.entries) {
+        if (ent.messageBox.midType != line::ToType::ROOM)
+            continue;
+
+        line::Room room;
+        room.mid = ent.messageBox.id;
+        room.contacts = ent.contacts;
+
+        chats_to_delete.erase(blist_update_chat(room));
+    }
+
+    for (PurpleChat *chat: chats_to_delete)
+        purple_blist_remove_chat(chat);
+
+    // Start up return channel
+    fetch_operations();
+
+    purple_connection_set_state(conn, PURPLE_CONNECTED);
+    purple_connection_update_progress(conn, "Connected", 2, 3);
 }
 
 void PurpleLine::fetch_operations() {
@@ -691,6 +702,38 @@ void PurpleLine::blist_remove_buddy(std::string uid,
     }
 }
 
+std::string PurpleLine::get_room_display_name(line::Room &room) {
+    std::vector<line::Contact *> rcontacts;
+
+    for (line::Contact &rc: room.contacts) {
+        if (contacts.count(rc.mid) == 1)
+            rcontacts.push_back(&contacts[rc.mid]);
+    }
+
+    std::stringstream ss;
+    ss << "Chat with ";
+
+    switch (rcontacts.size()) {
+        case 0:
+            ss << "nobody...?";
+            break;
+
+        case 1:
+            ss << rcontacts[0]->displayName;
+            break;
+
+        case 2:
+            ss << rcontacts[0]->displayName << " and " << rcontacts[1]->displayName;
+            break;
+
+        default:
+            ss << rcontacts[0]->displayName << " and " << (rcontacts.size() - 1) << " other people";
+            break;
+    }
+
+    return ss.str();
+}
+
 std::set<PurpleChat *> PurpleLine::blist_find_chats_by_type(ChatType type) {
     std::string type_string = chat_type_to_string[type];
 
@@ -724,7 +767,6 @@ PurpleChat *PurpleLine::blist_ensure_chat(std::string id, ChatType type) {
         g_hash_table_insert(components, g_strdup("type"),
             g_strdup(chat_type_to_string[type].c_str()));
         g_hash_table_insert(components, g_strdup("id"), g_strdup(id.c_str()));
-        g_hash_table_insert(components, g_strdup("name"), g_strdup(id.c_str()));
 
         chat = purple_chat_new(acct, id.c_str(), components);
 
@@ -758,9 +800,6 @@ PurpleChat *PurpleLine::blist_update_chat(line::Group &group) {
 
     PurpleChat *chat = blist_ensure_chat(group.id, ChatType::GROUP);
 
-    GHashTable *components = purple_chat_get_components(chat);
-    g_hash_table_insert(components, g_strdup("name"), g_strdup(group.name.c_str()));
-
     purple_blist_alias_chat(chat, group.name.c_str());
 
     // If a conversation is somehow already open, set its members
@@ -781,14 +820,7 @@ PurpleChat *PurpleLine::blist_update_chat(line::Room &room) {
 
     PurpleChat *chat = blist_ensure_chat(room.mid, ChatType::ROOM);
 
-    std::stringstream ss;
-    ss << "Chat with " << room.contacts.size() << " people";
-    std::string display_name = ss.str();
-
-    GHashTable *components = purple_chat_get_components(chat);
-    g_hash_table_insert(components, g_strdup("name"), g_strdup(display_name.c_str()));
-
-    purple_blist_alias_chat(chat, display_name.c_str());
+    purple_blist_alias_chat(chat, get_room_display_name(room).c_str());
 
     // If a conversation is somehow already open, set its members
 
@@ -854,6 +886,10 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Room &room) {
         flags = g_list_prepend(flags, GINT_TO_POINTER(0));
     }
 
+    // Room contact lists don't contain self, so add for consistency
+    users = g_list_prepend(users, (gpointer)profile.mid.c_str());
+    flags = g_list_prepend(flags, GINT_TO_POINTER(0));
+
     purple_conv_chat_add_users(chat, users, NULL, flags, FALSE);
 
     g_list_free(users);
@@ -895,14 +931,17 @@ void PurpleLine::join_chat(GHashTable *components) {
     PurpleConversation *conv = serv_got_joined_chat(
         conn,
         purple_id,
-        (char *)g_hash_table_lookup(components, "name"));
-
-    purple_conversation_set_data(conv, "type", g_strdup(chat_type_to_string[type].c_str()));
-    purple_conversation_set_data(conv, "id", g_strdup(id.c_str()));
+        (char *)g_hash_table_lookup(components, "id"));
 
     if (type == ChatType::GROUP) {
+        line::Group &group = groups[id];
+
+        purple_conversation_set_title(conv, group.name.c_str());
         set_chat_participants(PURPLE_CONV_CHAT(conv), groups[id]);
     } else if (type == ChatType::ROOM) {
+        line::Room &room = rooms[id];
+
+        purple_conversation_set_title(conv, get_room_display_name(room).c_str());
         set_chat_participants(PURPLE_CONV_CHAT(conv), rooms[id]);
     }
 

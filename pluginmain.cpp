@@ -51,7 +51,7 @@ static void init_prpl_info(PurplePluginProtocolInfo &i) {
 
     i.list_icon = &PurpleLine::list_icon;
     i.status_types = &PurpleLine::status_types;
-    //i.get_chat_name = &PurpleLine::get_chat_name;
+    i.get_chat_name = &PurpleLine::get_chat_name;
     i.status_text = &PurpleLine::status_text;
     i.tooltip_text = &PurpleLine::tooltip_text;
     i.login = &PurpleLine::login;
