@@ -1,8 +1,8 @@
 CPP = g++
 CFLAGS = -g -Wall -shared -fPIC \
 	-DHAVE_INTTYPES_H -DHAVE_CONFIG_H -DPURPLE_PLUGINS \
-	`pkg-config --cflags purple thrift glib`
-LIBS = `pkg-config --libs purple thrift glib`
+	`pkg-config --cflags purple thrift`
+LIBS = `pkg-config --libs purple thrift`
 
 MAIN = libline.so
 
