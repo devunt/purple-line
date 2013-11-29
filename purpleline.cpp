@@ -11,10 +11,15 @@
 static const char *LINE_GROUP = "LINE";
 static const char *LINE_TEMP_GROUP = "LINE Temporary";
 
+std::map<PurpleLine::ChatType, std::string> PurpleLine::chat_type_to_string {
+    { PurpleLine::ChatType::GROUP, "group" },
+    { PurpleLine::ChatType::ROOM, "room" },
+};
+
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     conn(conn),
     acct(acct),
-    next_id(1)
+    next_purple_id(1)
 {
     c_out = boost::make_shared<ThriftClient>(acct, conn, "/S4");
     c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
@@ -90,10 +95,12 @@ void PurpleLine::tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_inf
         purple_notify_user_info_add_pair_plaintext(user_info, "Official account", "Yes");
 
     if (PURPLE_BLIST_NODE_HAS_FLAG(buddy, PURPLE_BLIST_NODE_FLAG_NO_SAVE)) {
-        purple_notify_user_info_add_section_break(user_info);
+        // This breaks?
+        //purple_notify_user_info_add_section_break(user_info);
+
         purple_notify_user_info_add_pair_plaintext(user_info,
             "Temporary",
-            "You are currently in a conversation with this user, "
+            "You are currently in a conversation with this contact, "
                 "but they are not on your friend list.");
     }
 }
@@ -123,7 +130,7 @@ GList *PurpleLine::chat_info() {
 
 void PurpleLine::start_login() {
     purple_connection_set_state(conn, PURPLE_CONNECTING);
-    purple_connection_update_progress(conn, "Connecting", 0, 3);
+    purple_connection_update_progress(conn, "Logging in", 0, 3);
 
     c_out->send_loginWithIdentityCredentialForCertificate(
         purple_account_get_username(acct),
@@ -176,9 +183,6 @@ void PurpleLine::get_profile() {
         // Update display name
         purple_account_set_alias(acct, profile.displayName.c_str());
 
-        // Set account as connected. Buddy list synchronization happens next, but otherwise
-        // everything is usable
-        purple_connection_set_state(conn, PURPLE_CONNECTED);
         purple_connection_update_progress(conn, "Synchronizing buddy list", 1, 3);
 
         // Update account icon (not sure if there's a way to tell whether it has changed, maybe
@@ -217,13 +221,15 @@ void PurpleLine::get_contacts() {
             std::vector<line::Contact> contacts;
             c_out->recv_getContacts(contacts);
 
+            std::set<PurpleBuddy *> buddies_to_delete = blist_find<PurpleBuddy>();
+
             for (line::Contact &contact: contacts) {
                 if (contact.status == line::ContactStatus::FRIEND)
-                    blist_update_buddy(contact);
+                    buddies_to_delete.erase(blist_update_buddy(contact));
             }
 
-            // TODO: Remove buddies that are no longer contacts
-
+            for (PurpleBuddy *buddy: buddies_to_delete)
+                blist_remove_buddy(purple_buddy_get_name(buddy));
             {
                 // Add self as buddy for those lonely debugging conversations
                 // TODO: Remove
@@ -253,38 +259,64 @@ void PurpleLine::get_groups() {
             std::vector<line::Group> groups;
             c_out->recv_getGroups(groups);
 
-            for (line::Group &g: groups) {
-                group_map[g.id] = g;
+            std::set<PurpleChat *> chats_to_delete = blist_find_chats_by_type(ChatType::GROUP);
 
-                // Add chat to buddy list if it's not already there
+            for (line::Group &group: groups)
+                chats_to_delete.erase(blist_update_chat(group));
 
-                PurpleChat *chat = blist_find_chat_by_id(g.id);
-                if (!chat) {
-                    GHashTable *components = g_hash_table_new_full(
-                        g_str_hash, g_str_equal, g_free, g_free);
+            for (PurpleChat *chat: chats_to_delete)
+                purple_blist_remove_chat(chat);
 
-                    g_hash_table_insert(components, g_strdup("name"), g_strdup(g.name.c_str()));
-                    g_hash_table_insert(components, g_strdup("id"), g_strdup(g.id.c_str()));
-
-                    chat = purple_chat_new(acct, g.name.c_str(), components);
-
-                    purple_blist_add_chat(chat, blist_ensure_group(LINE_GROUP), nullptr);
-                }
-
-                // If chat is somehow already open, set its members
-
-                PurpleConvChat *conv_chat = PURPLE_CONV_CHAT(
-                    purple_find_chat(conn, chat_id_to_purple_id[g.id]));
-
-                if (conv_chat)
-                    set_chat_participants(conv_chat, g);
-            }
-
-            // Start up return channel
-            fetch_operations();
-
-            purple_connection_update_progress(conn, "Connected", 2, 3);
+            get_rooms();
         });
+    });
+}
+
+void PurpleLine::get_rooms() {
+    c_out->send_getMessageBoxCompactWrapUpList(1, 65535);
+    c_out->send([this]() {
+        line::MessageBoxCompactWrapUpList wrap_up_list;
+        c_out->recv_getMessageBoxCompactWrapUpList(wrap_up_list);
+
+        std::set<std::string> uids;
+        std::set<PurpleChat *> chats_to_delete = blist_find_chats_by_type(ChatType::ROOM);
+
+        for (line::MessageBoxEntry &ent: wrap_up_list.entries) {
+            if (ent.messageBox.midType != line::ToType::ROOM)
+                continue;
+
+            for (line::Contact &c: ent.contacts)
+                uids.insert(c.mid);
+
+            line::Room room;
+            room.mid = ent.messageBox.id;
+            room.contacts = ent.contacts;
+
+            chats_to_delete.erase(blist_update_chat(room));
+        }
+
+        for (PurpleChat *chat: chats_to_delete)
+            purple_blist_remove_chat(chat);
+
+        if (!uids.empty()) {
+            c_out->send_getContacts(std::vector<std::string>(uids.begin(), uids.end()));
+            c_out->send([this]{
+                std::vector<line::Contact> contacts;
+                c_out->recv_getContacts(contacts);
+
+                for (line::Contact &c: contacts)
+                    this->contacts[c.mid] = c;
+
+                //for (line::Contact &c: contacts)
+                //    blist_update_buddy(c, true);
+            });
+        }
+
+        // Start up return channel
+        fetch_operations();
+
+        purple_connection_set_state(conn, PURPLE_CONNECTED);
+        purple_connection_update_progress(conn, "Connected", 2, 3);
     });
 }
 
@@ -313,20 +345,28 @@ void PurpleLine::fetch_operations() {
                 case line::OperationType::END_OF_OPERATION:
                     break;
 
-                case line::OperationType::RECEIVE_MESSAGE:
-                    handle_message(op.message, false, false);
-                    break;
-
-                case line::OperationType::SEND_MESSAGE:
-                    handle_message(op.message, true, false);
-                    break;
-
                 case line::OperationType::ADD_CONTACT:
                     blist_update_buddy(op.param1);
                     break;
 
                 case line::OperationType::BLOCK_CONTACT:
                     blist_remove_buddy(op.param1);
+                    break;
+
+                case line::OperationType::LEAVE_GROUP:
+                    blist_remove_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                case line::OperationType::LEAVE_ROOM:
+                    blist_remove_chat(op.param1, ChatType::ROOM);
+                    break;
+
+                case line::OperationType::SEND_MESSAGE:
+                    handle_message(op.message, true, false);
+                    break;
+
+                case line::OperationType::RECEIVE_MESSAGE:
+                    handle_message(op.message, false, false);
                     break;
 
                 default:
@@ -390,8 +430,11 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                     (PurpleMessageFlags)flags,
                     mtime);
             }
-        } else if (msg.toType == line::ToType::GROUP) {
-            PurpleConversation *conv = purple_find_chat(conn, chat_id_to_purple_id[msg.to]);
+        } else if (msg.toType == line::ToType::GROUP || msg.toType == line::ToType::ROOM) {
+            PurpleConversation *conv = purple_find_conversation_with_account(
+                PURPLE_CONV_TYPE_CHAT,
+                msg.to.c_str(),
+                acct);
 
             if (conv) {
                 purple_conv_chat_write(
@@ -419,10 +462,13 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                 text.c_str(),
                 (PurpleMessageFlags)flags,
                 mtime);
-        } else if (msg.toType == line::ToType::GROUP) {
-            int purple_id = chat_id_to_purple_id[msg.to];
+        } else if (msg.toType == line::ToType::GROUP || msg.toType == line::ToType::ROOM) {
+            PurpleConversation *conv = purple_find_conversation_with_account(
+                PURPLE_CONV_TYPE_CHAT,
+                msg.to.c_str(),
+                acct);
 
-            if (!purple_id)
+            if (!conv)
                 return; // Chat isn't open TODO perhaps notify
 
             //if (replay) {
@@ -440,7 +486,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
             //} else {
                 serv_got_chat_in(
                     conn,
-                    purple_id,
+                    purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)),
                     msg.from.c_str(),
                     (PurpleMessageFlags)flags,
                     text.c_str(),
@@ -452,26 +498,6 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
     // Hack
     if (msg.from == msg.to)
         push_recent_message(msg.id);
-}
-
-PurpleChat *PurpleLine::blist_find_chat_by_id(std::string gid) {
-    for (PurpleBlistNode *node = purple_blist_get_root();
-        node;
-        node = purple_blist_node_next(node, FALSE))
-    {
-        if (!PURPLE_BLIST_NODE_IS_CHAT(node))
-            continue;
-
-        PurpleChat *chat = PURPLE_CHAT(node);
-
-        if (purple_chat_get_account(chat) == acct
-            && gid == (char *)g_hash_table_lookup(purple_chat_get_components(chat), "id"))
-        {
-            return chat;
-        }
-    }
-
-    return nullptr;
 }
 
 PurpleGroup *PurpleLine::blist_ensure_group(std::string group_name, bool temporary) {
@@ -494,7 +520,7 @@ PurpleGroup *PurpleLine::blist_ensure_group(std::string group_name, bool tempora
 PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, bool temporary) {
     PurpleBuddy *buddy = purple_find_buddy(acct, uid.c_str());
     if (buddy) {
-        int flags = purple_blist_node_get_flags(&buddy->node);
+        int flags = purple_blist_node_get_flags(PURPLE_BLIST_NODE(buddy));
 
         // If buddy is not temporary anymore, make them permanent.
         if ((flags & PURPLE_BLIST_NODE_FLAG_NO_SAVE) && !temporary)
@@ -509,22 +535,13 @@ PurpleBuddy *PurpleLine::blist_ensure_buddy(std::string uid, bool temporary) {
     } else {
         buddy = purple_buddy_new(acct, uid.c_str(), uid.c_str());
 
+        if (temporary)
+            purple_blist_node_set_flags(PURPLE_BLIST_NODE(buddy), PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
         purple_blist_add_buddy(
             buddy,
             nullptr,
             blist_ensure_group(temporary ? LINE_TEMP_GROUP : LINE_GROUP, temporary),
-            nullptr);
-
-        if (temporary)
-            purple_blist_node_set_flags(&buddy->node, PURPLE_BLIST_NODE_FLAG_NO_SAVE);
-    }
-    // Mark temporary friends as temporary. blist_update_buddy will mark actual friends as
-    // available.
-    if (temporary) {
-        purple_prpl_got_user_status(
-            acct,
-            uid.c_str(),
-            "temporary",
             nullptr);
     }
 
@@ -547,12 +564,14 @@ void PurpleLine::blist_update_buddy(std::string uid, bool temporary) {
 }
 
 // Updates buddy details such as alias, icon, status message
-void PurpleLine::blist_update_buddy(line::Contact contact, bool temporary) {
+PurpleBuddy *PurpleLine::blist_update_buddy(line::Contact &contact, bool temporary) {
+    contacts[contact.mid] = contact;
+
     PurpleBuddy *buddy = blist_ensure_buddy(contact.mid.c_str(), temporary);
     if (!buddy) {
         purple_debug_warning("line", "Tried to update a non-existent buddy %s\n",
             contact.mid.c_str());
-        return;
+        return nullptr;
     }
 
     // Update display name
@@ -581,23 +600,27 @@ void PurpleLine::blist_update_buddy(line::Contact contact, bool temporary) {
         // TODO: delete icon if any
     }
 
-    // Mark actual friends as available.
-    if (!temporary) {
-        purple_prpl_got_user_status(
-            acct,
-            contact.mid.c_str(),
-            purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
-            "message", contact.statusMessage.c_str(),
-            nullptr);
-    }
+    // Set actual friends as available and temporary friends as temporary. Also set status text.
+    purple_prpl_got_user_status(
+        acct,
+        contact.mid.c_str(),
+        PURPLE_BLIST_NODE_HAS_FLAG(buddy, PURPLE_BLIST_NODE_FLAG_NO_SAVE)
+            ? "temporary"
+            : purple_primitive_get_id_from_type(PURPLE_STATUS_AVAILABLE),
+        "message", contact.statusMessage.c_str(),
+        nullptr);
 
     if (contact.attributes & 32)
         purple_blist_node_set_bool(PURPLE_BLIST_NODE(buddy), "official_account", TRUE);
     else
         purple_blist_node_remove_setting(PURPLE_BLIST_NODE(buddy), "official_account");
+
+    return buddy;
 }
 
-bool PurpleLine::blist_is_buddy_in_any_conversation(std::string uid) {
+bool PurpleLine::blist_is_buddy_in_any_conversation(std::string uid,
+    PurpleConvChat *ignore_chat)
+{
     for (GList * convs = purple_get_conversations();
         convs;
         convs = g_list_next(convs))
@@ -608,6 +631,8 @@ bool PurpleLine::blist_is_buddy_in_any_conversation(std::string uid) {
             if (uid == purple_conversation_get_name(conv))
                 return true;
         } else if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) {
+            if (PURPLE_CONV_CHAT(conv) == ignore_chat)
+                continue;
 
             for (GList *buddies = purple_conv_chat_get_users(PURPLE_CONV_CHAT(conv));
                 buddies;
@@ -624,14 +649,24 @@ bool PurpleLine::blist_is_buddy_in_any_conversation(std::string uid) {
     return false;
 }
 
-void PurpleLine::blist_remove_buddy(std::string uid) {
+void PurpleLine::blist_remove_buddy(std::string uid,
+    bool temporary_only, PurpleConvChat *ignore_chat)
+{
     PurpleBuddy *buddy = purple_find_buddy(acct, uid.c_str());
     if (!buddy)
         return;
 
-    if (blist_is_buddy_in_any_conversation(uid)) {
+    bool temporary = PURPLE_BLIST_NODE_HAS_FLAG(buddy, PURPLE_BLIST_NODE_FLAG_NO_SAVE);
+
+    if (temporary_only && !temporary)
+        return;
+
+    if (blist_is_buddy_in_any_conversation(uid, ignore_chat)) {
         // If the buddy exists in a conversation, demote them to a temporary buddy instead of
         // deleting them completely.
+
+        if (temporary)
+            return;
 
         purple_blist_node_set_flags(&buddy->node,
             (PurpleBlistNodeFlags)
@@ -654,6 +689,125 @@ void PurpleLine::blist_remove_buddy(std::string uid) {
 
         purple_blist_remove_buddy(buddy);
     }
+}
+
+std::set<PurpleChat *> PurpleLine::blist_find_chats_by_type(ChatType type) {
+    std::string type_string = chat_type_to_string[type];
+
+    return blist_find<PurpleChat>([type_string](PurpleChat *chat) {
+        GHashTable *components = purple_chat_get_components(chat);
+
+        return type_string == (char *)g_hash_table_lookup(components, "type");
+    });
+}
+
+// Maybe put into function below
+PurpleChat *PurpleLine::blist_find_chat(std::string id, ChatType type) {
+    std::string type_string = chat_type_to_string[type];
+
+    std::set<PurpleChat *> chats = blist_find<PurpleChat>([type_string, id](PurpleChat *chat){
+        GHashTable *components = purple_chat_get_components(chat);
+
+        return type_string == (char *)g_hash_table_lookup(components, "type")
+            && id == (char *)g_hash_table_lookup(components, "id");
+    });
+
+    return chats.empty() ? nullptr : *chats.begin();
+}
+
+PurpleChat *PurpleLine::blist_ensure_chat(std::string id, ChatType type) {
+    PurpleChat *chat = blist_find_chat(id, type);
+    if (!chat) {
+        GHashTable *components = g_hash_table_new_full(
+            g_str_hash, g_str_equal, g_free, g_free);
+
+        g_hash_table_insert(components, g_strdup("type"),
+            g_strdup(chat_type_to_string[type].c_str()));
+        g_hash_table_insert(components, g_strdup("id"), g_strdup(id.c_str()));
+        g_hash_table_insert(components, g_strdup("name"), g_strdup(id.c_str()));
+
+        chat = purple_chat_new(acct, id.c_str(), components);
+
+        purple_blist_add_chat(chat, blist_ensure_group(LINE_GROUP), nullptr);
+    }
+
+    return chat;
+}
+
+// Fetch information for chat and call the other update_chat
+void PurpleLine::blist_update_chat(std::string id, ChatType type) {
+    // Put buddy on list already so it shows up as loading
+    blist_ensure_chat(id.c_str(), type);
+
+    if (type == ChatType::GROUP) {
+        c_out->send_getGroups(std::vector<std::string> { id });
+        c_out->send([this, type]{
+            std::vector<line::Group> groups;
+            c_out->recv_getGroups(groups);
+
+            if (groups.size() == 1)
+                blist_update_chat(groups[0]);
+        });
+    } else if (type == ChatType::ROOM) {
+        purple_debug_warning("line", "ROOM: TODO\n");
+    }
+}
+
+PurpleChat *PurpleLine::blist_update_chat(line::Group &group) {
+    groups[group.id] = group;
+
+    PurpleChat *chat = blist_ensure_chat(group.id, ChatType::GROUP);
+
+    GHashTable *components = purple_chat_get_components(chat);
+    g_hash_table_insert(components, g_strdup("name"), g_strdup(group.name.c_str()));
+
+    purple_blist_alias_chat(chat, group.name.c_str());
+
+    // If a conversation is somehow already open, set its members
+
+    PurpleConversation *conv = purple_find_conversation_with_account(
+        PURPLE_CONV_TYPE_CHAT,
+        group.id.c_str(),
+        acct);
+
+    if (conv)
+        set_chat_participants(PURPLE_CONV_CHAT(conv), group);
+
+    return chat;
+}
+
+PurpleChat *PurpleLine::blist_update_chat(line::Room &room) {
+    rooms[room.mid] = room;
+
+    PurpleChat *chat = blist_ensure_chat(room.mid, ChatType::ROOM);
+
+    std::stringstream ss;
+    ss << "Chat with " << room.contacts.size() << " people";
+    std::string display_name = ss.str();
+
+    GHashTable *components = purple_chat_get_components(chat);
+    g_hash_table_insert(components, g_strdup("name"), g_strdup(display_name.c_str()));
+
+    purple_blist_alias_chat(chat, display_name.c_str());
+
+    // If a conversation is somehow already open, set its members
+
+    PurpleConversation *conv = purple_find_conversation_with_account(
+        PURPLE_CONV_TYPE_CHAT,
+        room.mid.c_str(),
+        acct);
+
+    if (conv)
+        set_chat_participants(PURPLE_CONV_CHAT(conv), room);
+
+    return chat;
+}
+
+void PurpleLine::blist_remove_chat(std::string id, ChatType type) {
+    PurpleChat *chat = blist_find_chat(id, type);
+
+    if (chat)
+        purple_blist_remove_chat(chat);
 }
 
 void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group) {
@@ -686,40 +840,80 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group)
     g_list_free(flags);
 }
 
+void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Room &room) {
+    purple_conv_chat_clear_users(chat);
+
+    GList *users = NULL, *flags = NULL;
+
+    for (line::Contact &rc: room.contacts) {
+        // Room contacts don't have full contact information.
+        if (contacts.count(rc.mid) == 1)
+            blist_update_buddy(contacts[rc.mid], true);
+
+        users = g_list_prepend(users, (gpointer)rc.mid.c_str());
+        flags = g_list_prepend(flags, GINT_TO_POINTER(0));
+    }
+
+    purple_conv_chat_add_users(chat, users, NULL, flags, FALSE);
+
+    g_list_free(users);
+    g_list_free(flags);
+}
+
 void PurpleLine::join_chat(GHashTable *components) {
+    char *type_ptr = (char *)g_hash_table_lookup(components, "type");
+    if (!type_ptr) {
+        purple_debug_warning("line", "Tried to join a chat with no type.");
+        return;
+    }
+
+    ChatType type;
+
+    // >_>
+    std::string type_str(type_ptr);
+    if (type_str == chat_type_to_string[ChatType::GROUP]) {
+        type = ChatType::GROUP;
+    } else if (type_str == chat_type_to_string[ChatType::ROOM]) {
+        type = ChatType::ROOM;
+    } else {
+        purple_debug_warning("line", "Tried to join a chat with weird type.");
+        return;
+    }
+
     char *id_ptr = (char *)g_hash_table_lookup(components, "id");
     if (!id_ptr) {
         purple_debug_warning("line", "Tried to join a chat with no id.");
         return;
     }
 
-    std::string gid(id_ptr);
+    std::string id(id_ptr);
 
     // Assume chat is on buddy list for now.
 
-    int purple_id = next_id++;
-
-    // TODO: clean up maps when chat is closed
-    chat_purple_id_to_id[purple_id] = gid;
-    chat_id_to_purple_id[gid] = purple_id;
+    int purple_id = next_purple_id++;
 
     PurpleConversation *conv = serv_got_joined_chat(
         conn,
         purple_id,
         (char *)g_hash_table_lookup(components, "name"));
 
-    set_chat_participants(PURPLE_CONV_CHAT(conv), group_map[gid]);
+    purple_conversation_set_data(conv, "type", g_strdup(chat_type_to_string[type].c_str()));
+    purple_conversation_set_data(conv, "id", g_strdup(id.c_str()));
 
-    c_out->send_getRecentMessages(gid, 20);
+    if (type == ChatType::GROUP) {
+        set_chat_participants(PURPLE_CONV_CHAT(conv), groups[id]);
+    } else if (type == ChatType::ROOM) {
+        set_chat_participants(PURPLE_CONV_CHAT(conv), rooms[id]);
+    }
+
+    c_out->send_getRecentMessages(id, 20);
     c_out->send([this, purple_id]() {
         std::vector<line::Message> recent_msgs;
         c_out->recv_getRecentMessages(recent_msgs);
 
         PurpleConversation *conv = purple_find_chat(conn, purple_id);
-        if (!conv) {
-            // Chat went away already?
-            return;
-        }
+        if (!conv)
+            return; // Chat went away already?
 
         for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
             line::Message &msg = *i;
@@ -731,16 +925,7 @@ void PurpleLine::join_chat(GHashTable *components) {
     });
 }
 
-
-int PurpleLine::send_message(std::string to, int chat_purple_id, std::string text) {
-    if (chat_purple_id) {
-        to = chat_purple_id_to_id[chat_purple_id];
-        if (to == "") {
-            purple_debug_warning("line", "Tried to send to a nonexistent chat.");
-            return 0;
-        }
-    }
-
+int PurpleLine::send_message(std::string to, std::string text) {
     line::Message msg;
 
     msg.from = profile.mid;
@@ -748,7 +933,7 @@ int PurpleLine::send_message(std::string to, int chat_purple_id, std::string tex
     msg.text = text;
 
     c_out->send_sendMessage(0, msg);
-    c_out->send([this, to, chat_purple_id]() {
+    c_out->send([this, to]() {
         line::Message msg_back;
 
         try {
@@ -756,14 +941,10 @@ int PurpleLine::send_message(std::string to, int chat_purple_id, std::string tex
         } catch (line::TalkException &err) {
             PurpleConversation *conv = nullptr;
 
-            if (chat_purple_id) {
-                conv = purple_find_chat(conn, chat_purple_id);
-            } else {
-                conv = purple_find_conversation_with_account(
-                    PURPLE_CONV_TYPE_IM,
-                    to.c_str(),
-                    acct);
-            }
+            conv = purple_find_conversation_with_account(
+                PURPLE_CONV_TYPE_ANY,
+                to.c_str(),
+                acct);
 
             if (conv) {
                 purple_conversation_write(
@@ -777,7 +958,8 @@ int PurpleLine::send_message(std::string to, int chat_purple_id, std::string tex
             throw;
         }
 
-        if (!chat_purple_id)
+        // Kludge >_>
+        if (to[0] == 'u')
             push_recent_message(msg_back.id);
     });
 
@@ -785,11 +967,36 @@ int PurpleLine::send_message(std::string to, int chat_purple_id, std::string tex
 }
 
 int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
-    return send_message(who, 0, message);
+    return send_message(who, message);
+}
+
+void PurpleLine::chat_leave(int id) {
+    PurpleConversation *conv = purple_find_chat(conn, id);
+    if (!conv)
+        return;
+
+    PurpleConvChat *chat = PURPLE_CONV_CHAT(conv);
+
+    for (GList *buddies = purple_conv_chat_get_users(chat);
+        buddies;
+        buddies = g_list_next(buddies))
+    {
+        PurpleConvChatBuddy *buddy = (PurpleConvChatBuddy *)buddies->data;
+
+        blist_remove_buddy(purple_conv_chat_cb_get_name(buddy), true, chat);
+    }
 }
 
 int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags) {
-    return send_message("", id, message);
+    PurpleConversation *chat = purple_find_chat(conn, id);
+    if (!chat) {
+        purple_debug_warning("line", "Tried to send to a nonexistent chat.");
+        return 0;
+    }
+
+    std::string to((char *)purple_conversation_get_data(chat, "id"));
+
+    return send_message(to, message);
 }
 
 void PurpleLine::push_recent_message(std::string id) {

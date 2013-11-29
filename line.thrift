@@ -237,12 +237,23 @@ enum ContactStatus {
     FRIEND_BLOCKED = 2;
     RECOMMEND = 3;
     RECOMMEND_BLOCKED = 4;
+    DELETED = 5;
+    DELETED_BLOCKED = 6;
 }
 
 enum ContactRelation {
     ONEWAY = 0;
     BOTH = 1;
     NOT_REGISTERED = 2;
+}
+
+// Name guessed.
+enum ContactSettingsFlags {
+    CONTACT_SETTING_NOTIFICATION_DISABLE = 1;
+    CONTACT_SETTING_DISPLAY_NAME_OVERRIDE = 2;
+    CONTACT_SETTING_CONTACT_HIDE = 4;
+    CONTACT_SETTING_FAVORITE = 8;
+    CONTACT_SETTING_DELETE = 16;
 }
 
 struct Contact {
@@ -262,8 +273,13 @@ struct Contact {
     32: bool capableVideoCall;
     33: bool capableMyhome;
     34: bool capableBuddy;
-    35: i32 attributes; // Bitfield? 32 = "official account"
-    36: i64 settings; // Bitfield? 4 = hidden
+
+    // Bitfield. 32 = "official account" (shows green badge icon)
+    35: i32 attributes;
+
+    // Bitfield of ContactSettingsFlags
+    36: i64 settings;
+
     37: string picturePath;
 }
 
@@ -275,6 +291,38 @@ struct Group {
     20: list<Contact> members;
     21: Contact creator;
     22: list<Contact> invitee;
+}
+
+struct Room {
+    1: string mid;
+    2: i64 createdTime;
+    10: list<Contact> contacts;
+    31: bool notificationDisabled;
+}
+
+struct MessageBox {
+    1: string id;
+    2: string channelId;
+    5: i64 lastSeq;
+    6: i64 unreadCount;
+    7: i64 lastModifiedTime;
+    8: i32 status;
+    9: ToType midType;
+    10: list<Message> lastMessages;
+}
+
+// Names guessed
+struct MessageBoxEntry {
+    1: MessageBox messageBox;
+    2: string displayName;
+    3: list<Contact> contacts;
+    4: string mystery; // looks like Contact::pictureStatus
+}
+
+// Names guessed
+struct MessageBoxCompactWrapUpList {
+    1: list<MessageBoxEntry> entries;
+    2: i32 mystery; // seen: 0
 }
 
 // cyd.class
@@ -301,12 +349,13 @@ service Line {
     // Gets detailed information on contacts
     list<Contact> getContacts(2: list<string> ids) throws (1: TalkException e);
 
-    Contact findAndAddContactsByMid(1: i32 reqSeq, 2: string mid) throws (1: TalkException e);
-
     // Gets list of current user's joined groups
     list<string> getGroupIdsJoined() throws (1: TalkException e);
 
     list<Group> getGroups(2: list<string> ids) throws (1: TalkException e);
+
+    MessageBoxCompactWrapUpList getMessageBoxCompactWrapUpList(2: i32 mystery1, 3: i32 mystery2)
+        throws (1: TalkException e);
 
     // Get recent messages from a group chat (n.b. arg names guessed)
     list<Message> getRecentMessages(2: string gid, 3: i32 count) throws (1: TalkException e);
@@ -319,4 +368,6 @@ service Line {
 
     // Sends a message to chat or user
     Message sendMessage(1: i32 seq, 2: Message message) throws (1: TalkException e);
+
+    Contact findAndAddContactsByMid(1: i32 reqSeq, 2: string mid) throws (1: TalkException e);
 }
