@@ -5,12 +5,22 @@ libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.naver.jp/en/) by
 
 The LINE protocol is closed, proprietary and there is no public API nor a truly cross-platform client (how lame!), so this repository shall also serve as unofficial documentation for the LINE protocol.
 
-Screen shot
------------
+Does it work?
+-------------
 
-Here's Pidgin logged in to LINE. The plugin is still at an early stage, so simple IM and group chats is all it can do for the moment.
+Yes, to an extent. Here's Pidgin logged in to LINE, but it's not quite stable and featureful enough to be used as one's main LINE client yet.
 
 ![Screenshot](http://virkkunen.net/b/pidgin-line2.png)
+
+How to install
+--------------
+
+    make
+    make install
+
+This will build and install the plugin into your home directory. The prerequisites are a recent C++ compiler, the Apache Thrift compiler and libraries, and libpurple. Builds are only tested on Arch Linux for now.
+
+Easy to install packages will not be available until I get all the main features implemented.
 
 Implemented
 -----------
