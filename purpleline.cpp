@@ -1027,15 +1027,13 @@ void PurpleLine::chat_leave(int id) {
 }
 
 int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags) {
-    PurpleConversation *chat = purple_find_chat(conn, id);
-    if (!chat) {
+    PurpleConversation *conv = purple_find_chat(conn, id);
+    if (!conv) {
         purple_debug_warning("line", "Tried to send to a nonexistent chat.");
         return 0;
     }
 
-    std::string to((char *)purple_conversation_get_data(chat, "id"));
-
-    return send_message(to, message);
+    return send_message(purple_conversation_get_name(conv), message);
 }
 
 void PurpleLine::push_recent_message(std::string id) {
