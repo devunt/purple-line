@@ -16,7 +16,7 @@ OBJS = $(SRCS:.cpp=.o)
 all: $(MAIN)
 
 $(MAIN): $(OBJS)
-	$(CPP) $(CFLAGS) $(LIBS) -o $(MAIN) $(OBJS)
+	$(CPP) $(CFLAGS) -Wl,-z,defs -o $(MAIN) $(OBJS) $(LIBS)
 
 .cpp.o:
 	$(CPP) $(CFLAGS) -std=c++0x -c $< -o $@
