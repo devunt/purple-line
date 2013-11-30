@@ -1,7 +1,6 @@
 #include <glib.h>
 
 #include <account.h>
-#include <config.h>
 #include <debug.h>
 #include <prpl.h>
 #include <version.h>
