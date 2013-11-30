@@ -10,7 +10,7 @@
 #include <plugin.h>
 #include <prpl.h>
 
-#include <protocol/TCompactProtocol.h>
+#include <thrift/protocol/TCompactProtocol.h>
 
 #include "thrift_line/Line.h"
 #include "thrift_line/line_types.h"

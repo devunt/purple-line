@@ -10,7 +10,7 @@
 #include <account.h>
 #include <sslconn.h>
 
-#include <transport/TTransport.h>
+#include <thrift/transport/TTransport.h>
 
 #include "wrapper.hpp"
 
