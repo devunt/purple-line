@@ -60,6 +60,7 @@ static void init_prpl_info(PurplePluginProtocolInfo &i) {
     i.join_chat = WRAPPER(PurpleLine::join_chat);
     i.chat_leave = WRAPPER(PurpleLine::chat_leave);
     i.chat_send = WRAPPER(PurpleLine::chat_send);
+    i.find_blist_chat = WRAPPER(PurpleLine::find_blist_chat);
 
     i.struct_size = sizeof(PurplePluginProtocolInfo);
 }

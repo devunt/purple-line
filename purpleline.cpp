@@ -748,10 +748,12 @@ std::set<PurpleChat *> PurpleLine::blist_find_chats_by_type(ChatType type) {
 PurpleChat *PurpleLine::blist_find_chat(std::string id, ChatType type) {
     std::string type_string = chat_type_to_string[type];
 
-    std::set<PurpleChat *> chats = blist_find<PurpleChat>([type_string, id](PurpleChat *chat){
+    std::set<PurpleChat *> chats = blist_find<PurpleChat>([type, type_string, id](PurpleChat *chat){
         GHashTable *components = purple_chat_get_components(chat);
 
-        return type_string == (char *)g_hash_table_lookup(components, "type")
+        return
+            (type == ChatType::ANY
+                || type_string == (char *)g_hash_table_lookup(components, "type"))
             && id == (char *)g_hash_table_lookup(components, "id");
     });
 
@@ -936,13 +938,11 @@ void PurpleLine::join_chat(GHashTable *components) {
     if (type == ChatType::GROUP) {
         line::Group &group = groups[id];
 
-        purple_conversation_set_title(conv, group.name.c_str());
-        set_chat_participants(PURPLE_CONV_CHAT(conv), groups[id]);
+        set_chat_participants(PURPLE_CONV_CHAT(conv), group);
     } else if (type == ChatType::ROOM) {
         line::Room &room = rooms[id];
 
-        purple_conversation_set_title(conv, get_room_display_name(room).c_str());
-        set_chat_participants(PURPLE_CONV_CHAT(conv), rooms[id]);
+        set_chat_participants(PURPLE_CONV_CHAT(conv), room);
     }
 
     c_out->send_getRecentMessages(id, 20);
@@ -1040,6 +1040,10 @@ void PurpleLine::push_recent_message(std::string id) {
     recent_messages.push_back(id);
     if (recent_messages.size() > 50)
         recent_messages.pop_front();
+}
+
+PurpleChat *PurpleLine::find_blist_chat(const char *name) {
+    return blist_find_chat(name, ChatType::ANY);
 }
 
 ThriftProtocol::ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans)

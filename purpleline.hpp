@@ -44,6 +44,7 @@ struct _blist_node_type<PurpleChat> {
 class PurpleLine {
 
     enum class ChatType {
+        ANY = 0,
         GROUP = 1,
         ROOM = 2,
     };
@@ -85,6 +86,7 @@ public:
     void join_chat(GHashTable *components);
     void chat_leave(int id);
     int chat_send(int id, const char *message, PurpleMessageFlags flags);
+    PurpleChat *find_blist_chat(const char *name);
 
 private:
 
