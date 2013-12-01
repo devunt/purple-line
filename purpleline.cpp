@@ -5,11 +5,28 @@
 #include <conversation.h>
 #include <debug.h>
 #include <sslconn.h>
+#include <util.h>
 
 #include "purpleline.hpp"
 
 static const char *LINE_GROUP = "LINE";
 static const char *LINE_TEMP_GROUP = "LINE Temporary";
+
+static std::string markup_escape(std::string const &text) {
+    gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
+    std::string result(escaped);
+    g_free(escaped);
+
+    return result;
+}
+
+static std::string markup_unescape(std::string const &markup) {
+    gchar *unescaped = purple_unescape_html(markup.c_str());
+    std::string result(unescaped);
+    g_free(unescaped);
+
+    return result;
+}
 
 std::map<PurpleLine::ChatType, std::string> PurpleLine::chat_type_to_string {
     { PurpleLine::ChatType::GROUP, "group" },
@@ -410,15 +427,15 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
     switch (msg.contentType) {
         case line::ContentType::NONE: // actually text
-            text = msg.text;
+            text = markup_escape(msg.text);
             break;
 
         // TODO: other content types
 
         default:
-            text = "[";
+            text = "<em>[Not implemented: ";
             text += line::_ContentType_VALUES_TO_NAMES.at(msg.contentType);
-            text += " message]";
+            text += " message]</em>";
             break;
     }
 
@@ -1006,7 +1023,7 @@ int PurpleLine::send_message(std::string to, std::string text) {
 }
 
 int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
-    return send_message(who, message);
+    return send_message(who, markup_unescape(message));
 }
 
 void PurpleLine::chat_leave(int id) {
@@ -1033,7 +1050,7 @@ int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags)
         return 0;
     }
 
-    return send_message(purple_conversation_get_name(conv), message);
+    return send_message(purple_conversation_get_name(conv), markup_unescape(message));
 }
 
 void PurpleLine::push_recent_message(std::string id) {
