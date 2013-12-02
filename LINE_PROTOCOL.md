@@ -3,45 +3,54 @@ Naver LINE protocol
 
 Matti Virkkunen <mvirkkunen@gmail.com>
 
-Document is accurate as of 2013-11-28.
+Document is accurate as of 2013-12-03.
 
-This unofficial document describes the LINE (by Naver / NHN Japan) instant messenger protocol.
-Observations are based mostly on monitoring the desktop Windows client's traffic (under Wine), and
-decompiled source code. Therefore, many things might not be accurate.
+This unofficial document describes the LINE (by Naver / NHN Japan) instant messenger protocol. The
+information is based mostly on reverse engineering and therefore accuracy is not guaranteed.
 
-Also, it's not nearly finished yet.
+Also, this document is unfinished. I'm expanding it as I go.
+
+Overview
+--------
+
+LINE as a whole consists of a number of web services because of their multitude of apps and
+subsystems, but the only service that's needed for replicating their desktop IM client's
+functionality is the TalkService.
+
+The protocol is based on a request-response architecture over HTTP(S), with a long poll return
+channel. Apache Thrift is used for serialization of message data.
 
 Wire protocol
 -------------
 
-File: line.thrift (things used by the desktop client)
-
 File: line-talk-full.thrift (full Thrift interface from the Android client)
 
-The files have some overlap.
+File: line.thrift (also includes some things only used by the desktop client)
 
-Apache Thrift TCompactProtocol via HTTPS to gd2.line.naver.jp:443. The path is /S4 for most
-messages, /P4 is used to get a long poll connection for fetchOperations.
+The protocol is Apache Thrift TCompactProtocol via HTTPS to gd2.line.naver.jp:443. The HTTP request
+path is /S4 for most requests, /P4 is used to get a long poll connection for fetchOperations.
 
-Encryption is required.
+Unencrypted HTTP also seems to work for the moment, but using it is a really bad idea security-wise.
+Naver itself seems to be currently transitioning to 100% HTTPS.
 
-If using a keep-alive connection (and you should be), headers from the first request can be
-persisted. Headers in following requests temporarily override the persisted value. A mystery
-header called X-LS apparently has something to do with this. If you want to persist headers, you
-must remember the X-LS header value the server sends you and send it back in the next request. The
-values seem to be integers. (Could LS be short for "Line Session"?)
+If using a keep-alive connection, headers from the first request can be persisted. Headers in
+following requests can temporarily override the persisted value. An HTTP header called X-LS is also
+involved. If you want to persist headers, you must remember the X-LS header value the server gives
+you and send it back in the next request. The values seem to be integers. The name could be short
+for "Line Server", and it's probably used so that load-balancers can direct the following responses
+back to the same server that knows the headers.
 
-Using persistent headers it's possible to send each request with just two headers - X-LS and
+By using persistent headers it's possible to send each request with just two headers - X-LS and
 Content-Length.
 
 The official protocol seems to be to first make one request to get an authentication key, and then
 open a new connection so that the authentication key can be persisted along with the rest of the
-headers.
+headers for the following requests.
 
 Types and concepts
 ------------------
 
-Friends, chats and groups are identified by 32-digit hex GUIDs prefixed with one characte for the
+Friends, chats and groups are identified by 32-digit hex GUIDs prefixed with one character for the
 type.
 
 Internally any user is referred to as a Contact. Contacts are identified by a "mid" and the prefix
@@ -54,7 +63,7 @@ are called Groups internally as well and are identified by an "id" which is pref
 Any message is represented by a Message object. Message IDs are numeric but they are stored as
 strings.
 
-Timestamps are millisecond precision UNIX time represented as a 64-bit integer (TODO: check the
+Timestamps are millisecond precision UNIX time represented as 64-bit integers (TODO: check the
 timezone just in case)
 
 Message authentication
@@ -167,15 +176,23 @@ There is no separate function to delete a contact for some reason, instead it's 
 CONTACT_SETTING_DELETE setting. Even though it's a setting, this is equivalent to really deleting
 the friend - they won't appear on getallContactIds() anymore. (FIXME: actually test this...)
 
-IM conversations
+Sending messages
 ----------------
 
-sendMessage(msg) with a contact ID in the msg.to field.
+Messages are sent using the sendMessage() function.
 
-Group conversations
--------------------
+    sendMessage(seq, msg)
 
-sendMessage(msg) with a group ID in the msg.to field.
+The seq parameter doesn't seem to be matter, and can be sent as zero. The msg parameter is the
+Message object to send.
+
+The only required fields for a text message are "to", which can be the ID for any valid message
+recipient (user, chat or group), and the "text" field which is the text content to send. Other
+message types involve the contentMetadata fields and possibly uploading files to a separate server.
+
+The return value from sendMessage is a partial Message object that only contains the fields "id",
+"createdTime" and "from". The ID is a numeric string that can be used to refer to that message
+later.
 
 Message types
 -------------
@@ -226,7 +243,7 @@ Return channel
 
     fetchOperations(localRev, count)
 
-For incoming messages, long polling with fetchOperations() to the /S4 path is used. A HTTP 410 Gone
+For incoming events, long polling with fetchOperations() to the /P4 path is used. An HTTP 410 Gone
 response signals a timed out poll, in which case a new request should be issued.
 
 When new data arrives, a list of Operation objects is returned. Each Operation (except the end
@@ -247,7 +264,8 @@ The following is a list of operation types.
 ### END_OF_OPERATION (0)
 
 Signifies the end of the list. This presumably means all operations were returned and none were left
-out due to the count param. This message contains no data, not even a revision number.
+out due to the count param. This message contains no data, not even a revision number, so don't
+accidentally set your localRev to zero.
 
 ### UPDATE_PROFILE (1)
 
@@ -304,6 +322,9 @@ including the one that sent the message.
 
 Informs about a received message that another user sent either to the current user or to a chat. The
 message field contains the message.
+
+The desktop client doesn't seem to care about the included message data, but instead immediately
+re-requests it using getNextMessages().
 
 * message = received message
 
