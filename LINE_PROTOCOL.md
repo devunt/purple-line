@@ -259,6 +259,11 @@ In general NOTIFIED_* messages notify the current user about other users' action
 non-NOTIFIED counterparts notify the current user about their own actions, in order to sync them
 across devices.
 
+For many operations the official client doesn't seem to care about the fact that the param1-param3
+fields contain the details of the operation and will rather re-fetch data with a get method instead.
+For instance, many group member list changes will cause the client to do a getGroup(). This may be
+either just lazy coding or a sign of the param parameters being phased out.
+
 The following is a list of operation types.
 
 ### END_OF_OPERATION (0)
@@ -311,6 +316,84 @@ The current user has unblocked a contact.
 * param1 = ID of the user that was unblocked
 * param2 = (mystery, seen "NORMAL")
 
+### CREATE_GROUP (9)
+
+The current user has created a group. The official client immediately fetches group details with
+getGroup().
+
+* param1 = ID of the group.
+
+### UPDATE_GROUP (10)
+
+The current user has updated a group.
+
+* param1 = ID of the group
+* param2 = (Maybe a bitfield of properties? 1 = name, 2 = picture)
+
+### NOTIFIED_UPDATE_GROUP (11)
+
+Another user has updated group the current user is a member of.
+
+* param1 = ID of the group
+* param2 = ID of the user who updated the group
+* param3 = (Maybe a bitfield of properties?)
+
+###  INVITE_INTO_GROUP (12)
+
+The current user has invited somebody to join a group.
+
+* param1 = ID of the group
+* param2 = ID of the user that has been invited
+
+### NOTIFIED_INVITE_INTO_GROUP (13)
+
+The current user has been invited to join a group.
+
+* param1 = ID of the group
+* param2 = ID of the user who invited the current user
+* param3 = ID of the current user
+
+### LEAVE_GROUP (14)
+
+The current user has left a group.
+
+* param1 = ID of the group
+
+### NOTIFIED_LEAVE_GROUP (15)
+
+Another user has left a group the current user is a member of.
+
+* param1 = ID of the group
+* param2 = ID of the user that left the group
+
+### ACCEPT_GROUP_INVITATION (16)
+
+The current user has accepted a group invitation.
+
+* param1 = ID of the group
+
+### NOTIFIED_ACCEPT_GROUP_INVITATION (17)
+
+Another user has joined a group the current user is a member of.
+
+* param1 = ID of the group
+* param2 = ID of the user that joined the group
+
+### KICKOUT_FROM_GROUP (18)
+
+The current user has removed somebody from a group.
+
+* param1 = ID of the group
+* param2 = ID of the user that was removed
+
+### NOTIFIED_KICKOUT_FROM_GROUP (19)
+
+Another user has removed a user from a group. The removed user can also be the current user.
+
+* param1 = ID of the group
+* param2 = ID of the user that removed the current user
+* param3 = ID of the user that was removed
+
 ### SEND_MESSAGE (25)
 
 Informs about a message that the current user sent. This is returned to all connected devices,
@@ -335,6 +418,33 @@ Informs that another user has read (seen) messages sent by the current user.
 * param1 = ID of the user that read the message
 * param2 = IDs of the messages, multiple IDs are separated by U+001E INFORMATION SEPARATOR TWO
 
+### CANCEL_INVITATION_GROUP (31)
+
+The current user has canceled a group invitation.
+
+* param1 = ID of the group
+* param2 = ID of the user whose invitation was canceled
+
+### NOTIFIED_CANCEL_INVITATION_GROUP (32)
+
+Another user has canceled a group invitation. The canceled invitation can also be that of the
+current user.
+
+* param1 = ID of the group
+* param2 = ID of the user that canceled the request (or invited them in the first place?)
+* param3 = ID of the user whose invitation was canceled
+
+### REJECT_GROUP_INVITATION (34)
+
+The current user has rejected a group infication.
+
+* param1 = ID of the group
+
+### NOTIFIED_REJECT_GROUP_INVITATION (35)
+
+Presumably means another user has rejected a group invitation. However this message doesn't seem to
+get sent.
+
 ### UPDATE_SETTINGS (36)
 
 User settings have changed. Refresh with getSettingsAttributes() or getSettings()
@@ -351,3 +461,23 @@ getContact[s]().
 
 * param1 = ID of the user that changed
 * param2 = probably bitfield of changed properties
+
+### (Mystery) 60
+
+Meaning unknown. Has appeared after NOTIFIED_ACCEPT_GROUP_INVITATION.
+
+Seen the following parameters:
+
+* param1 = a group ID
+* param2 = another user's ID
+
+### (Mystery) 61
+
+Meaning unknown. Has appeared after NOTIFIED_LEAVE_GROUP, KICKOUT_FROM_GROUP and
+NOTIFIED_KICKOUT_FROM_GROUP.
+
+Seen the following parameters:
+
+* param1 = a group ID
+* param2 = another user's ID
+* param3 = "0"
