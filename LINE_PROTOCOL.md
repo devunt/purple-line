@@ -394,6 +394,42 @@ Another user has removed a user from a group. The removed user can also be the c
 * param2 = ID of the user that removed the current user
 * param3 = ID of the user that was removed
 
+### CREATE_ROOM (20)
+
+The current user has created a room.
+
+* param1 = ID of the room
+
+### INVITE_INTO_ROOM (21)
+
+The current user has invited users into a room.
+
+* param1 = ID of the room
+* param2 = IDs of the users, multiple IDs are separated by U+001E INFORMATION SEPARATOR TWO
+
+### NOTIFIED_INVITE_INTO_ROOM (22)
+
+The current user has been invited into a room. Invitations to rooms to others are not actually sent
+until a message is sent to the room.
+
+* param1 = ID of the room
+* param2 = ID of the user that invited the current user
+* param3 = IDs of the users in the room, multiple IDs are separated by U+001E INFORMATION SEPARATOR
+           TWO. The user ID in param2 is not included in this list.
+
+### LEAVE_ROOM (23)
+
+The current user has left a room. Seems to be immediately followed by SEND_CHAT_REMOVED (41).
+
+* param1 = ID of the room
+
+### NOTIFIED_LEAVE_ROOM (24)
+
+Another user has left a room.
+
+* param1 = ID of the room
+* param2 = ID of the user that left
+
 ### SEND_MESSAGE (25)
 
 Informs about a message that the current user sent. This is returned to all connected devices,
@@ -454,6 +490,13 @@ User settings have changed. Refresh with getSettingsAttributes() or getSettings(
 
 ### SEND_CHAT_CHECKED (40)
 
+### SEND_CHAT_REMOVED (41)
+
+The current user has cleared the history of a chat.
+
+* param1 = user ID or group ID or room ID
+* param2 = seen "990915482402" - maybe an ID, it's similar to IDs
+
 ### UPDATE_CONTACT (49)
 
 The current user's settings (e.g. hidden status) for a contact has changed. Refresh with
@@ -464,7 +507,7 @@ getContact[s]().
 
 ### (Mystery) 60
 
-Meaning unknown. Has appeared after NOTIFIED_ACCEPT_GROUP_INVITATION.
+Meaning unknown. Has appeared after NOTIFIED_ACCEPT_GROUP_INVITATION and NOTIFIED_INVITE_INTO_ROOM.
 
 Seen the following parameters:
 
@@ -474,7 +517,7 @@ Seen the following parameters:
 ### (Mystery) 61
 
 Meaning unknown. Has appeared after NOTIFIED_LEAVE_GROUP, KICKOUT_FROM_GROUP and
-NOTIFIED_KICKOUT_FROM_GROUP.
+NOTIFIED_KICKOUT_FROM_GROUP and NOTIFIED_LEAVE_ROOM.
 
 Seen the following parameters:
 
