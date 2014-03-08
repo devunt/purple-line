@@ -28,7 +28,8 @@ File: line-talk-full.thrift (full Thrift interface from the Android client)
 File: line.thrift (also includes some things only used by the desktop client)
 
 The protocol is Apache Thrift TCompactProtocol via HTTPS to gd2.line.naver.jp:443. The HTTP request
-path is /S4 for most requests, /P4 is used to get a long poll connection for fetchOperations.
+path is /S4 for most requests. Some specific requests use a different path, specified where
+relevant.
 
 Unencrypted HTTP also seems to work for the moment, but using it is a really bad idea security-wise.
 Naver itself seems to be currently transitioning to 100% HTTPS.
@@ -102,12 +103,63 @@ This Thrift method issues a new authToken for an e-mail address and password com
         IdentityProvider.LINE, // identityProvider
         "") // certificate
 
-For the login request, the X-Line-Access header must be specified but the value can be anything.
+For the login request, the X-Line-Access header must be specified but the value can be anything. The
+result structure is as follows:
+
+    struct LoginResult {
+        1: string authToken;
+        2: certificate;
+        3: verifier;
+        4: pinCode;
+        5: i32 type;
+    }
+
+After a successful login, the type is equal to 1 and the authToken field contains the X-Line-Access
+value to use in subsequent requests.
 
 The official desktop client sends an encrypted e-mail/password involving RSA and no X-Line-Access
-header, but it works just as fine in plain text.
+header, but it works just as fine in plain text. (TODO: Include description of RSA login procedure)
 
-TODO: Include description of RSA login procedure
+Login verification procedure
+----------------------------
+
+In current versions, LINE now requires you to verify your identity using a PIN code when logging in
+to a desktop client for the first time from a "new location" based on geo-IP. This is obviously also
+required when logging in with the desktop client for the very first time.
+
+When PIN verification is required, the login method returns a type of 3 instead of 1. The pinCode
+field contains a PIN code to display to the user and the verifier field is set to a random token
+that is used to identify this verification session. The token stays the same for the whole process.
+
+The client then issues an empty request to the HTTP path /Q with the X-Line-Access header set to the
+verifier token. This request blocks until the user enters the correct PIN code on their mobile
+device.
+
+There doesn't seem to be a limit for incorrect PIN entries on the mobile device, but there is
+currently a three minute time limit. After this the token expires. The client keeps track of the
+time limit locally and aborts the request when it's over.
+
+A success response from /Q is JSON containing the following:
+
+    {
+        "timestamp": "946684800000",
+        "result": {
+            "verifier": "the_verifier_token",
+            "authPhase": "QRCODE_VERIFIED"
+        }
+    }
+
+After this response is received the client issues a loginWithVerifierForCertificate() call with the
+verifier token as the parameter. The server then returns a normal LoginReply message with the usual
+authToken.
+
+If the token has already expired the response from /Q looks like the following:
+
+    {
+        "timestamp": "946684800000",
+        "errorCode": "404",
+        "errorMessage": "key+is+not+found%3A+the_verifier_token+NOT_FOUND"
+    }
 
 Initial sync
 ------------
@@ -243,8 +295,9 @@ Return channel
 
     fetchOperations(localRev, count)
 
-For incoming events, long polling with fetchOperations() to the /P4 path is used. An HTTP 410 Gone
-response signals a timed out poll, in which case a new request should be issued.
+For incoming events, fetchOperations() calls to the HTTP path /P4 is used. Using the /P4 path
+enables long polling, where the responses block until something happens or a timeout expires. An
+HTTP 410 Gone response signals a timed out poll, in which case a new request should be issued.
 
 When new data arrives, a list of Operation objects is returned. Each Operation (except the end
 marker) comes with a version number, and the next localRev should be the highest revision number
