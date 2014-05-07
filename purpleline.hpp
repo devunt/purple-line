@@ -10,13 +10,7 @@
 #include <plugin.h>
 #include <prpl.h>
 
-#include <thrift/protocol/TCompactProtocol.h>
-
-#include "thrift_line/Line.h"
-#include "thrift_line/line_types.h"
-#include "thrift_line/line_constants.h"
-
-#include "linehttptransport.hpp"
+#include "thriftclient.hpp"
 
 #define LINEPRPL_ID "prpl-mvirkkunen-line"
 
@@ -147,35 +141,7 @@ private:
     void set_chat_participants(PurpleConvChat *chat, line::Room &room);
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
-
     int send_message(std::string to, std::string text);
     void push_recent_message(std::string id);
-
-};
-
-class ThriftProtocol : public apache::thrift::protocol::TCompactProtocolT<LineHttpTransport> {
-
-public:
-
-    ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans);
-
-    LineHttpTransport *getTransport();
-
-};
-
-class ThriftClient : public line::LineClientT<ThriftProtocol> {
-
-    std::string path;
-    LineHttpTransport *http;
-
-public:
-
-    ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path);
-
-    void set_auth_token(std::string token);
-    void send(std::function<void()> callback);
-
-    int status_code();
-    void close();
 
 };
