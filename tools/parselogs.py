@@ -7,9 +7,9 @@
 from subprocess import call
 
 # Regenerate thrift files
-call(["rm", "-rr", "thrift_line_py"])
-call(["mkdir", "thrift_line_py"])
-call(["thrift", "--gen", "py", "-out", "thrift_line_py", "../line.thrift"])
+#call(["rm", "-rr", "thrift_line_py"])
+#call(["mkdir", "thrift_line_py"])
+#call(["thrift", "--gen", "py", "-out", "thrift_line_py", "../line.thrift"])
 
 from thrift.Thrift import TType, TMessageType
 from thrift.transport import TTransport
