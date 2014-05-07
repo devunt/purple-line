@@ -12,7 +12,7 @@
 
 #include <thrift/protocol/TCompactProtocol.h>
 
-#include "thrift_line/Line.h"
+#include "thrift_line/TalkService.h"
 #include "thrift_line/line_types.h"
 #include "thrift_line/line_constants.h"
 
@@ -28,7 +28,7 @@ public:
 
 };
 
-class ThriftClient : public line::LineClientT<ThriftProtocol> {
+class ThriftClient : public line::TalkServiceClientT<ThriftProtocol> {
 
     std::string path;
     LineHttpTransport *http;

@@ -147,12 +147,12 @@ void PurpleLine::start_login() {
     purple_connection_update_progress(conn, "Logging in", 0, 3);
 
     c_out->send_loginWithIdentityCredentialForCertificate(
+        line::IdentityProvider::LINE,
         purple_account_get_username(acct),
         purple_account_get_password(acct),
         true,
         "127.0.0.1",
         "libpurple",
-        line::Provider::LINE,
         "");
     c_out->send([this]() {
         line::LoginResult result;
@@ -289,13 +289,13 @@ void PurpleLine::get_groups() {
 void PurpleLine::get_rooms() {
     c_out->send_getMessageBoxCompactWrapUpList(1, 65535);
     c_out->send([this]() {
-        line::MessageBoxCompactWrapUpList wrap_up_list;
+        line::TMessageBoxWrapUpResponse wrap_up_list;
         c_out->recv_getMessageBoxCompactWrapUpList(wrap_up_list);
 
         std::set<std::string> uids;
 
-        for (line::MessageBoxEntry &ent: wrap_up_list.entries) {
-            if (ent.messageBox.midType != line::ToType::ROOM)
+        for (line::TMessageBoxWrapUp &ent: wrap_up_list.messageBoxWrapUpList) {
+            if (ent.messageBox.midType != line::MIDType::ROOM)
                 continue;
 
             for (line::Contact &c: ent.contacts)
@@ -321,11 +321,11 @@ void PurpleLine::get_rooms() {
     });
 }
 
-void PurpleLine::update_rooms(line::MessageBoxCompactWrapUpList wrap_up_list) {
+void PurpleLine::update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list) {
     std::set<PurpleChat *> chats_to_delete = blist_find_chats_by_type(ChatType::ROOM);
 
-    for (line::MessageBoxEntry &ent: wrap_up_list.entries) {
-        if (ent.messageBox.midType != line::ToType::ROOM)
+    for (line::TMessageBoxWrapUp &ent: wrap_up_list.messageBoxWrapUpList) {
+        if (ent.messageBox.midType != line::MIDType::ROOM)
             continue;
 
         line::Room room;
@@ -367,30 +367,30 @@ void PurpleLine::fetch_operations() {
 
         for (line::Operation &op: operations) {
             switch (op.type) {
-                case line::OperationType::END_OF_OPERATION:
+                case line::OpType::END_OF_OPERATION:
                     break;
 
-                case line::OperationType::ADD_CONTACT:
+                case line::OpType::ADD_CONTACT:
                     blist_update_buddy(op.param1);
                     break;
 
-                case line::OperationType::BLOCK_CONTACT:
+                case line::OpType::BLOCK_CONTACT:
                     blist_remove_buddy(op.param1);
                     break;
 
-                case line::OperationType::LEAVE_GROUP:
+                case line::OpType::LEAVE_GROUP:
                     blist_remove_chat(op.param1, ChatType::GROUP);
                     break;
 
-                case line::OperationType::LEAVE_ROOM:
+                case line::OpType::LEAVE_ROOM:
                     blist_remove_chat(op.param1, ChatType::ROOM);
                     break;
 
-                case line::OperationType::SEND_MESSAGE:
+                case line::OpType::SEND_MESSAGE:
                     handle_message(op.message, true, false);
                     break;
 
-                case line::OperationType::RECEIVE_MESSAGE:
+                case line::OpType::RECEIVE_MESSAGE:
                     handle_message(op.message, false, false);
                     break;
 
@@ -441,7 +441,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
         flags |= PURPLE_MESSAGE_SEND;
 
-        if (msg.toType == line::ToType::USER) {
+        if (msg.toType == line::MIDType::USER) {
             PurpleConversation *conv = purple_find_conversation_with_account(
                 PURPLE_CONV_TYPE_IM,
                 msg.to.c_str(),
@@ -455,7 +455,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                     (PurpleMessageFlags)flags,
                     mtime);
             }
-        } else if (msg.toType == line::ToType::GROUP || msg.toType == line::ToType::ROOM) {
+        } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
             PurpleConversation *conv = purple_find_conversation_with_account(
                 PURPLE_CONV_TYPE_CHAT,
                 msg.to.c_str(),
@@ -475,7 +475,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
         flags |= PURPLE_MESSAGE_RECV;
 
-        if (msg.toType == line::ToType::USER) {
+        if (msg.toType == line::MIDType::USER) {
             if (msg.to != profile.mid) {
                 purple_debug_warning("line", "Got message meant for some other user...?");
                 return;
@@ -487,7 +487,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                 text.c_str(),
                 (PurpleMessageFlags)flags,
                 mtime);
-        } else if (msg.toType == line::ToType::GROUP || msg.toType == line::ToType::ROOM) {
+        } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
             PurpleConversation *conv = purple_find_conversation_with_account(
                 PURPLE_CONV_TYPE_CHAT,
                 msg.to.c_str(),

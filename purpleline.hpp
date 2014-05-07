@@ -91,7 +91,7 @@ private:
     void get_contacts();
     void get_groups();
     void get_rooms();
-    void update_rooms(line::MessageBoxCompactWrapUpList wrap_up_list);
+    void update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list);
 
     // Long poll return channel
     void fetch_operations();

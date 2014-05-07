@@ -13,7 +13,7 @@ LineHttpTransport *ThriftProtocol::getTransport() {
 }
 
 ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
-    : line::LineClientT<ThriftProtocol>(
+    : line::TalkServiceClientT<ThriftProtocol>(
         boost::make_shared<ThriftProtocol>(
             boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, true))),
     path(path)
@@ -35,4 +35,10 @@ int ThriftClient::status_code() {
 
 void ThriftClient::close() {
     http->close();
+}
+
+// Required for the single set<Contact> in the interface
+
+bool line::Contact::operator<(const Contact &other) const {
+    return mid < other.mid;
 }
