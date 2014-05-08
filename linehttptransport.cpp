@@ -156,7 +156,6 @@ void LineHttpTransport::send_next() {
             << "User-Agent: " USER_AGENT "\r\n"
             << "X-Line-Application: " APPLICATION_NAME "\r\n";
 
-
         if (auth_token != "")
             data << "X-Line-Access: " << auth_token << "\r\n";
     }
@@ -243,26 +242,21 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
             try {
                 request_queue.front().callback();
             } catch (line::TalkException &err) {
-                switch (err.code) {
-                    case line::ErrorCode::NOT_AUTHORIZED_DEVICE:
-                        if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
-                            conn->wants_to_die = TRUE;
-                            purple_connection_error(conn,
-                                "LINE: You have been logged out because "
-                                "you logged in from another device.");
-                            return;
-                        } else {
-                            throw;
-                        }
+                std::string msg = "LINE: TalkException: ";
+                msg += err.reason;
 
-                        break;
-                    default:
-                        purple_notify_error(conn,
-                            "LINE connection error",
-                            err.reason.c_str(),
-                            nullptr);
-                        break;
+                if (err.code == line::ErrorCode::NOT_AUTHORIZED_DEVICE) {
+                    if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
+                        msg = "LINE: You have been logged out because "
+                            "you logged in from another device.";
+                    } else if (err.reason == "REVOKE") {
+                        msg = "LINE: This device was logged out via the mobile app.";
+                    }
                 }
+
+                conn->wants_to_die = TRUE;
+                purple_connection_error(conn, msg.c_str());
+                return;
             } catch (apache::thrift::TApplicationException &err) {
                 std::string msg = "LINE: Application error: ";
                 msg += err.what();
