@@ -49,7 +49,7 @@ class PurpleLine {
     PurpleAccount *acct;
 
     boost::shared_ptr<ThriftClient> c_out, c_in;
-    boost::shared_ptr<LineHttpTransport> http_os;
+    boost::shared_ptr<LineHttpTransport> http_os, http_pin;
 
     int64_t local_rev;
 
@@ -61,6 +61,9 @@ class PurpleLine {
     std::map<std::string, line::Group> groups;
     std::map<std::string, line::Room> rooms;
     std::map<std::string, line::Contact> contacts;
+
+    void *pin_ui_handle;
+    guint pin_timeout;
 
 public:
 
@@ -86,6 +89,14 @@ private:
 
     // Login process methods, executed in this this order
     void start_login();
+
+    void pin_verification(line::LoginResult result); // optional
+    int pin_verification_timeout();
+    void pin_verification_cancel(int);
+    void pin_verification_end();
+    void pin_verification_error(std::string error);
+
+    void got_auth_token(std::string auth_token);
     void get_last_op_revision();
     void get_profile();
     void get_contacts();

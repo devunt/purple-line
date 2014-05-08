@@ -32,7 +32,9 @@ LineHttpTransport::LineHttpTransport(
 {
 }
 
-LineHttpTransport::~LineHttpTransport() { }
+LineHttpTransport::~LineHttpTransport() {
+    close();
+}
 
 void LineHttpTransport::set_auth_token(std::string token) {
     this->auth_token = token;
@@ -129,6 +131,9 @@ void LineHttpTransport::send_next() {
     if (next_req.method == "POST")
         data << "Content-Length: " << next_req.data.size() << "\r\n";
 
+    if (auth_token != "")
+        data << "X-Line-Access: " << auth_token << "\r\n";
+
     if (ls_mode) {
         if (x_ls.size() > 0)
             data << "X-LS: " << x_ls << "\r\n";
@@ -140,8 +145,7 @@ void LineHttpTransport::send_next() {
                 << "Host: " << host << ":" << port << "\r\n"
                 << "Accept: application/x-thrift" "\r\n"
                 << "User-Agent: " USER_AGENT "\r\n"
-                << "X-Line-Application: " APPLICATION_NAME "\r\n"
-                << "X-Line-Access: " << auth_token << "\r\n";
+                << "X-Line-Application: " APPLICATION_NAME "\r\n";
         }
 
         first_request = false;
@@ -150,8 +154,7 @@ void LineHttpTransport::send_next() {
             << "Connection: Keep-Alive" "\r\n"
             << "Host: " << host << ":" << port << "\r\n"
             << "User-Agent: " USER_AGENT "\r\n"
-            << "X-Line-Application: " APPLICATION_NAME "\r\n"
-            << "X-Line-Access: " << auth_token << "\r\n";
+            << "X-Line-Application: " APPLICATION_NAME "\r\n";
     }
 
     data
@@ -257,10 +260,14 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
                         break;
                 }
             } catch (apache::thrift::TApplicationException &err) {
-                // Likely a Thrift deserialization error. Connection is probably in an inconsistent
-                // state, so better kill it.
+                std::string msg = "LINE: Application error: ";
+                msg += err.what();
 
-                std::string msg = "LINE: Connection error: ";
+                conn->wants_to_die = TRUE;
+                purple_connection_error(conn, msg.c_str());
+                return;
+            } catch (apache::thrift::transport::TTransportException &err) {
+                std::string msg = "LINE: Transport error: ";
                 msg += err.what();
 
                 conn->wants_to_die = TRUE;

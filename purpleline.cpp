@@ -3,11 +3,16 @@
 #include <time.h>
 
 #include <conversation.h>
+#include <request.h>
 #include <debug.h>
 #include <sslconn.h>
 #include <util.h>
+#include <eventloop.h>
 
 #include "purpleline.hpp"
+#include "wrapper.hpp"
+
+const char *LINE_CERTIFICATE = "line-certificate";
 
 static std::string markup_escape(std::string const &text) {
     gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
@@ -146,14 +151,16 @@ void PurpleLine::start_login() {
     purple_connection_set_state(conn, PURPLE_CONNECTING);
     purple_connection_update_progress(conn, "Logging in", 0, 3);
 
+    std::string certificate(purple_account_get_string(acct, LINE_CERTIFICATE, ""));
+
     c_out->send_loginWithIdentityCredentialForCertificate(
         line::IdentityProvider::LINE,
         purple_account_get_username(acct),
         purple_account_get_password(acct),
         true,
         "127.0.0.1",
-        "libpurple",
-        "");
+        "purple-line (Pidgin)",
+        certificate);
     c_out->send([this]() {
         line::LoginResult result;
 
@@ -169,15 +176,148 @@ void PurpleLine::start_login() {
             return;
         }
 
-        // Re-open output client to update persistent headers
-        c_out->close();
+        if (result.type == line::LoginResultType::SUCCESS && result.authToken != "")
+        {
+            got_auth_token(result.authToken);
+        }
+        else if (result.type == line::LoginResultType::REQUIRE_DEVICE_CONFIRM)
+        {
+            pin_verification(result);
+        }
+        else
+        {
+            std::stringstream ss("Could not log in. Bad LoginResult type: ");
+            ss << result.type;
+            std::string msg = ss.str();
 
-        c_out->set_auth_token(result.authToken);
-        c_in->set_auth_token(result.authToken);
-        http_os->set_auth_token(result.authToken);
-
-        get_last_op_revision();
+            purple_connection_error(
+                conn,
+                msg.c_str());
+        }
     });
+}
+
+void PurpleLine::pin_verification(line::LoginResult result) {
+    const int minutes = 3;
+
+    const std::string verifier = result.verifier;
+
+    std::stringstream ss;
+    ss
+        << result.pinCode
+        << "\n\nThe number has to be entered into the LINE mobile application within "
+        << minutes
+        << " minutes. If the time runs out, reconnect to try again."
+        << "\n\nYou will only have to verify your account once per computer.";
+    std::string pin_msg = ss.str();
+
+    pin_ui_handle = purple_request_action(
+        (void *)conn,
+        "LINE account verification",
+        "Enter this number on your mobile device",
+        pin_msg.c_str(),
+        0,
+        acct,
+        nullptr,
+        nullptr,
+        (gpointer)this,
+        1,
+        "Cancel",
+        (PurpleRequestActionCb)WRAPPER(PurpleLine::pin_verification_cancel));
+
+    pin_timeout = purple_timeout_add_seconds(
+        minutes * 60,
+        WRAPPER(PurpleLine::pin_verification_timeout),
+        (gpointer)this);
+
+    http_pin = boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, false);
+    http_pin->set_auth_token(verifier);
+
+    http_pin->request("GET", "/Q", [this, verifier]() {
+        if (http_pin->status_code() != 200) {
+            std::stringstream ss;
+            ss << "Account verification failed: invalid status code: " << http_pin->status_code();
+
+            pin_verification_error(ss.str());
+            return;
+        }
+
+        std::string json((size_t)http_pin->content_length(), '\0');
+        http_pin->read((uint8_t *)&json[0], json.size());
+
+        // Don't feel like invoking an entire JSON parser for this, this should be good enough.
+        if (json.find("\"QRCODE_VERIFIED\"") == std::string::npos) {
+            pin_verification_error("Account verification failed: server would not verify.");
+            return;
+        }
+
+        c_out->send_loginWithVerifierForCertificate(verifier);
+        c_out->send([this, verifier]() {
+            line::LoginResult result;
+
+            try {
+                c_out->recv_loginWithVerifierForCertificate(result);
+            } catch (line::TalkException &err) {
+                pin_verification_error("Account verification failed: Exception: " + err.reason);
+                return;
+            }
+
+            if (result.authToken == "") {
+                pin_verification_error("Account verification failed: no auth token.");
+                return;
+            }
+
+            if (result.certificate != "")
+                purple_account_set_string(acct, LINE_CERTIFICATE, result.certificate.c_str());
+
+            pin_verification_end();
+
+            got_auth_token(result.authToken);
+        });
+    });
+}
+
+int PurpleLine::pin_verification_timeout() {
+    pin_verification_error("Account verification timed out.");
+
+    return FALSE;
+}
+
+void PurpleLine::pin_verification_cancel(int) {
+    pin_verification_error("Account verification cancelled.");
+}
+
+void PurpleLine::pin_verification_end() {
+    http_pin.reset();
+
+    if (pin_timeout) {
+        purple_timeout_remove(pin_timeout);
+        pin_timeout = 0;
+    }
+
+    if (pin_ui_handle) {
+        purple_request_close(PURPLE_REQUEST_ACTION, pin_ui_handle);
+        pin_ui_handle = nullptr;
+    }
+}
+
+void PurpleLine::pin_verification_error(std::string error) {
+    pin_verification_end();
+
+    purple_connection_error(
+        conn,
+        error.c_str());
+}
+
+void PurpleLine::got_auth_token(std::string auth_token) {
+    // Re-open output client to update persistent headers
+    c_out->close();
+
+    c_out->set_auth_token(auth_token);
+    c_in->set_auth_token(auth_token);
+    http_os->set_auth_token(auth_token);
+
+    get_last_op_revision();
 }
 
 void PurpleLine::get_last_op_revision() {
