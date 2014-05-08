@@ -21,6 +21,10 @@ ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::str
     http = piprot_->getTransport();
 }
 
+void ThriftClient::set_path(std::string path) {
+    this->path = path;
+}
+
 void ThriftClient::set_auth_token(std::string token) {
     http->set_auth_token(token);
 }

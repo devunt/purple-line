@@ -23,7 +23,7 @@ LineHttpTransport::LineHttpTransport(
     host(host),
     port(port),
     ls_mode(ls_mode),
-    auth_token("x"),
+    auth_token(""),
     ssl(NULL),
     connection_id(0),
     connection_close(false),
@@ -131,9 +131,6 @@ void LineHttpTransport::send_next() {
     if (next_req.method == "POST")
         data << "Content-Length: " << next_req.data.size() << "\r\n";
 
-    if (auth_token != "")
-        data << "X-Line-Access: " << auth_token << "\r\n";
-
     if (ls_mode) {
         if (x_ls.size() > 0)
             data << "X-LS: " << x_ls << "\r\n";
@@ -146,6 +143,9 @@ void LineHttpTransport::send_next() {
                 << "Accept: application/x-thrift" "\r\n"
                 << "User-Agent: " USER_AGENT "\r\n"
                 << "X-Line-Application: " APPLICATION_NAME "\r\n";
+
+            if (auth_token != "")
+                data << "X-Line-Access: " << auth_token << "\r\n";
         }
 
         first_request = false;
@@ -155,6 +155,10 @@ void LineHttpTransport::send_next() {
             << "Host: " << host << ":" << port << "\r\n"
             << "User-Agent: " USER_AGENT "\r\n"
             << "X-Line-Application: " APPLICATION_NAME "\r\n";
+
+
+        if (auth_token != "")
+            data << "X-Line-Access: " << auth_token << "\r\n";
     }
 
     data

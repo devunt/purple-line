@@ -40,7 +40,7 @@ PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     acct(acct),
     next_purple_id(1)
 {
-    c_out = boost::make_shared<ThriftClient>(acct, conn, "/S4");
+    c_out = boost::make_shared<ThriftClient>(acct, conn, "/api/v4/TalkService.do");
     c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
     http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, false);
 }
@@ -312,6 +312,7 @@ void PurpleLine::pin_verification_error(std::string error) {
 void PurpleLine::got_auth_token(std::string auth_token) {
     // Re-open output client to update persistent headers
     c_out->close();
+    c_out->set_path("/S4");
 
     c_out->set_auth_token(auth_token);
     c_in->set_auth_token(auth_token);
