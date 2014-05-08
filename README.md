@@ -1,9 +1,11 @@
+**Warning: Unfinished software!** This plugin is still under development and many things are still unstable or unimplemented.
+
 purple-line
 ===========
 
-libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.naver.jp/en/) by Naver / NHN Japan. It's not quite featureful and stable enough to be used as a primary client for Line yet, but it's under heavy development.
+libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.me/) by Naver / LINE Corporation.
 
-The LINE protocol is closed, proprietary and there is no public API nor a truly cross-platform client (how lame!). I'm documenting the protocol as I go (documentation at https://github.com/mvirkkunen/line-protocol/)
+The LINE protocol is closed, proprietary and there is no public API nor a truly cross-platform client (how lame!). Therefore, I'm seeing if I can implement a usable libpurple plugin for it and I'm documenting the protocol as I go (documentation at https://github.com/mvirkkunen/line-protocol/)
 
 Does it work?
 -------------
