@@ -3,9 +3,6 @@
 #include <string>
 #include <deque>
 
-#include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
-
 #include <debug.h>
 #include <plugin.h>
 #include <prpl.h>

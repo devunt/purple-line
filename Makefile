@@ -24,7 +24,7 @@ $(MAIN): $(OBJS)
 
 thrift_line: line.thrift
 	mkdir -p thrift_line
-	thrift --gen cpp:templates -out thrift_line line.thrift
+	thrift --gen cpp -out thrift_line line.thrift
 
 clean:
 	rm -f $(MAIN)

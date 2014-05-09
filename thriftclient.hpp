@@ -10,28 +10,16 @@
 #include <plugin.h>
 #include <prpl.h>
 
-#include <thrift/protocol/TCompactProtocol.h>
-
 #include "thrift_line/TalkService.h"
 #include "thrift_line/line_types.h"
 #include "thrift_line/line_constants.h"
 
 #include "linehttptransport.hpp"
 
-class ThriftProtocol : public apache::thrift::protocol::TCompactProtocolT<LineHttpTransport> {
-
-public:
-
-    ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans);
-
-    LineHttpTransport *getTransport();
-
-};
-
-class ThriftClient : public line::TalkServiceClientT<ThriftProtocol> {
+class ThriftClient : public line::TalkServiceClient {
 
     std::string path;
-    LineHttpTransport *http;
+    boost::shared_ptr<LineHttpTransport> http;
 
 public:
 

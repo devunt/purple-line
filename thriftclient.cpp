@@ -1,24 +1,17 @@
 #include <account.h>
 #include <connection.h>
 
+#include <thrift/protocol/TCompactProtocol.h>
+
 #include "thriftclient.hpp"
 
-ThriftProtocol::ThriftProtocol(boost::shared_ptr<LineHttpTransport> trans)
-    : apache::thrift::protocol::TCompactProtocolT<LineHttpTransport>(trans)
-{
-}
-
-LineHttpTransport *ThriftProtocol::getTransport() {
-    return trans_;
-}
-
 ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
-    : line::TalkServiceClientT<ThriftProtocol>(
-        boost::make_shared<ThriftProtocol>(
+    : line::TalkServiceClient(
+        boost::make_shared<apache::thrift::protocol::TCompactProtocol>(
             boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, true))),
     path(path)
 {
-    http = piprot_->getTransport();
+    http = boost::static_pointer_cast<LineHttpTransport>(getInputProtocol()->getTransport());
 }
 
 void ThriftClient::set_path(std::string path) {
