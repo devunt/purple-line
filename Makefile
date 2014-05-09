@@ -1,5 +1,5 @@
-CPP = g++
-CFLAGS = -g -Wall -shared -fPIC \
+CXX = g++
+CXXFLAGS = -g -Wall -shared -fPIC \
 	-DHAVE_INTTYPES_H -DHAVE_CONFIG_H -DPURPLE_PLUGINS \
 	`pkg-config --cflags purple thrift`
 LIBS = `pkg-config --libs purple thrift`
@@ -17,10 +17,10 @@ OBJS = $(SRCS:.cpp=.o)
 all: $(MAIN)
 
 $(MAIN): $(OBJS)
-	$(CPP) $(CFLAGS) -Wl,-z,defs -o $(MAIN) $(OBJS) $(LIBS)
+	$(CXX) $(CXXFLAGS) -Wl,-z,defs -o $(MAIN) $(OBJS) $(LIBS)
 
 .cpp.o:
-	$(CPP) $(CFLAGS) -std=c++0x -c $< -o $@
+	$(CXX) $(CXXFLAGS) -std=c++11 -c $< -o $@
 
 thrift_line: line.thrift
 	mkdir -p thrift_line
@@ -40,7 +40,7 @@ depend: .depend
 
 .depend: thrift_line $(REAL_SRCS)
 	rm -f .depend
-	$(CPP) $(CFLAGS) -MM $(REAL_SRCS) >>.depend
+	$(CXX) $(CXXFLAGS) -MM $(REAL_SRCS) >>.depend
 
 -include .depend
 
