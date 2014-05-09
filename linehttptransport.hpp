@@ -37,7 +37,6 @@ class LineHttpTransport : public apache::thrift::transport::TTransport {
 
     PurpleSslConnection *ssl;
     int connection_id;
-    bool first_request;
 
     uint8_t buf[BUFFER_SIZE];
 

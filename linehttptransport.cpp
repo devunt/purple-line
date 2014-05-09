@@ -53,7 +53,6 @@ void LineHttpTransport::open() {
         return;
 
     in_progress = false;
-    first_request = true;
 
     connection_id++;
     ssl = purple_ssl_connect(
@@ -132,10 +131,12 @@ void LineHttpTransport::send_next() {
         data << "Content-Length: " << next_req.data.size() << "\r\n";
 
     if (ls_mode) {
-        if (x_ls.size() > 0)
+        if (x_ls != "")
+        {
             data << "X-LS: " << x_ls << "\r\n";
-
-        if (first_request) {
+        }
+        else
+        {
             data
                 << "Connection: Keep-Alive" "\r\n"
                 << "Content-Type: application/x-thrift" "\r\n"
@@ -147,8 +148,6 @@ void LineHttpTransport::send_next() {
             if (auth_token != "")
                 data << "X-Line-Access: " << auth_token << "\r\n";
         }
-
-        first_request = false;
     } else {
         data
             << "Connection: Keep-Alive" "\r\n"
