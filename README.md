@@ -38,6 +38,7 @@ Implemented
 * Synchronize buddy list on the fly
   * Adding friends
   * Blocking friends
+  * Removing friends
   * Leaving groups
   * Leaving chats
 * Buddy icons
@@ -48,7 +49,6 @@ To do
 * Fetch recent messages
   * For IMs
 * Synchronize buddy list on the fly
-  * Removing friends
   * Group invitations
   * Joining groups
   * Joining chats

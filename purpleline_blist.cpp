@@ -61,19 +61,29 @@ void PurpleLine::blist_update_buddy(std::string uid, bool temporary) {
     // Put buddy on list already so it shows up as loading
     blist_ensure_buddy(uid.c_str(), temporary);
 
-    c_out->send_getContacts(std::vector<std::string> { uid });
+    c_out->send_getContact(uid);
     c_out->send([this, temporary]{
-        std::vector<line::Contact> contacts;
-        c_out->recv_getContacts(contacts);
+        line::Contact contact;
+        c_out->recv_getContact(contact);
 
-        if (contacts.size() == 1)
-            blist_update_buddy(contacts[0], temporary);
+        if (contact.__isset.mid)
+            blist_update_buddy(contact, temporary);
     });
 }
 
 // Updates buddy details such as alias, icon, status message
 PurpleBuddy *PurpleLine::blist_update_buddy(line::Contact &contact, bool temporary) {
     contacts[contact.mid] = contact;
+
+    if (!temporary
+        && (contact.status == line::ContactStatus::FRIEND_BLOCKED
+            || contact.status == line::ContactStatus::RECOMMEND_BLOCKED
+            || contact.status == line::ContactStatus::DELETED
+            || contact.status == line::ContactStatus::DELETED_BLOCKED))
+    {
+        blist_remove_buddy(contact.mid, false);
+        return nullptr;
+    }
 
     PurpleBuddy *buddy = blist_ensure_buddy(contact.mid.c_str(), temporary);
     if (!buddy) {

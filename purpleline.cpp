@@ -385,6 +385,7 @@ void PurpleLine::get_contacts() {
 
             for (PurpleBuddy *buddy: buddies_to_delete)
                 blist_remove_buddy(purple_buddy_get_name(buddy));
+
             {
                 // Add self as buddy for those lonely debugging conversations
                 // TODO: Remove
@@ -508,31 +509,39 @@ void PurpleLine::fetch_operations() {
 
         for (line::Operation &op: operations) {
             switch (op.type) {
-                case line::OpType::END_OF_OPERATION:
+                case line::OpType::END_OF_OPERATION: // 0
                     break;
 
-                case line::OpType::ADD_CONTACT:
+                case line::OpType::ADD_CONTACT: // 4
                     blist_update_buddy(op.param1);
                     break;
 
-                case line::OpType::BLOCK_CONTACT:
+                case line::OpType::BLOCK_CONTACT: // 6
                     blist_remove_buddy(op.param1);
                     break;
 
-                case line::OpType::LEAVE_GROUP:
+                case line::OpType::UNBLOCK_CONTACT: // 7
+                    blist_update_buddy(op.param1);
+                    break;
+
+                case line::OpType::LEAVE_GROUP: // 14
                     blist_remove_chat(op.param1, ChatType::GROUP);
                     break;
 
-                case line::OpType::LEAVE_ROOM:
+                case line::OpType::LEAVE_ROOM: // 23
                     blist_remove_chat(op.param1, ChatType::ROOM);
                     break;
 
-                case line::OpType::SEND_MESSAGE:
+                case line::OpType::SEND_MESSAGE: // 25
                     handle_message(op.message, true, false);
                     break;
 
-                case line::OpType::RECEIVE_MESSAGE:
+                case line::OpType::RECEIVE_MESSAGE: // 26
                     handle_message(op.message, false, false);
+                    break;
+
+                case line::OpType::UPDATE_CONTACT: // 49
+                    blist_update_buddy(op.param1);
                     break;
 
                 default:
