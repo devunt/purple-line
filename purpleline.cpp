@@ -925,9 +925,9 @@ int PurpleLine::send_message(std::string to, std::string text) {
         try {
             c_out->recv_sendMessage(msg_back);
         } catch (line::TalkException &err) {
-            PurpleConversation *conv = nullptr;
+            std::string msg = "Failed to send message: " + err.reason;
 
-            conv = purple_find_conversation_with_account(
+            PurpleConversation *conv = purple_find_conversation_with_account(
                 PURPLE_CONV_TYPE_ANY,
                 to.c_str(),
                 acct);
@@ -936,12 +936,18 @@ int PurpleLine::send_message(std::string to, std::string text) {
                 purple_conversation_write(
                     conv,
                     "",
-                    "Failed to send message.",
+                    msg.c_str(),
                     (PurpleMessageFlags)PURPLE_MESSAGE_ERROR,
                     time(NULL));
+            } else {
+                purple_notify_error(
+                    (void *)conn,
+                    "LINE error",
+                    msg.c_str(),
+                    nullptr);
             }
 
-            throw;
+            return;
         }
 
         // Kludge >_>
