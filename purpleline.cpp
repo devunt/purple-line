@@ -237,6 +237,7 @@ void PurpleLine::get_profile() {
         // Update display name
         purple_account_set_alias(acct, profile.displayName.c_str());
 
+        purple_connection_set_state(conn, PURPLE_CONNECTED);
         purple_connection_update_progress(conn, "Synchronizing buddy list", 1, 3);
 
         // Update account icon (not sure if there's a way to tell whether it has changed, maybe
@@ -382,7 +383,6 @@ void PurpleLine::update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list) {
     // Start up return channel
     poller.start();
 
-    purple_connection_set_state(conn, PURPLE_CONNECTED);
     purple_connection_update_progress(conn, "Connected", 2, 3);
 }
 

@@ -259,7 +259,7 @@ void PurpleLine::blist_update_chat(std::string id, ChatType type) {
     blist_ensure_chat(id.c_str(), type);
 
     if (type == ChatType::GROUP) {
-        c_out->send_getGroup(id );
+        c_out->send_getGroup(id);
         c_out->send([this]{
             line::Group group;
             c_out->recv_getGroup(group);
