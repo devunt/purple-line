@@ -41,6 +41,7 @@ Implemented
   * Removing friends
   * Joining chats
   * Leaving chats
+  * Group invitations
   * Joining groups
   * Leaving groups
 * Buddy icons
@@ -51,7 +52,6 @@ To do
 * Fetch recent messages
   * For IMs
 * Synchronize buddy list on the fly
-  * Group invitations
   * Sync group/chat users more gracefully, show people joining/leaving
 * Editing buddy list
   * Adding friends (needs search function)
