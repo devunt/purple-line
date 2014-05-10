@@ -30,7 +30,11 @@ struct wrapper_<Ret(Class::*)(Args...), Func> {
     Ret static f_end(Args... args, gpointer context) {
         return (((Class *)context)->*Func)(args...);
     }
+
+    Ret static f_signal(Args... args, void *context) {
+        return (((Class *)context)->*Func)(args...);
+    }
 };
 
 #define WRAPPER(MEMBER) (wrapper_<decltype(&MEMBER), &MEMBER>::f)
-#define WRAPPER_AT(MEMBER, WHERE) (wrapper_<decltype(&MEMBER), &MEMBER>::f_##WHERE)
+#define WRAPPER_TYPE(MEMBER, TYPE) (wrapper_<decltype(&MEMBER), &MEMBER>::f_##TYPE)

@@ -37,6 +37,22 @@ std::map<ChatType, std::string> PurpleLine::chat_type_to_string {
     { ChatType::ROOM, "room" },
 };
 
+ChatType PurpleLine::get_chat_type(const char *type_ptr) {
+    if (!type_ptr)
+        return ChatType::ANY; // Invalid
+
+    std::string type_str(type_ptr);
+
+    if (type_str == chat_type_to_string[ChatType::GROUP])
+        return ChatType::GROUP;
+    else if (type_str == chat_type_to_string[ChatType::ROOM])
+        return ChatType::ROOM;
+    else if (type_str == chat_type_to_string[ChatType::GROUP_INVITE])
+        return ChatType::GROUP_INVITE;
+
+    return ChatType::ANY; // Invalid
+}
+
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     conn(conn),
     acct(acct),
@@ -132,11 +148,32 @@ void PurpleLine::login(PurpleAccount *acct) {
     PurpleLine *plugin = new PurpleLine(conn, acct);
     conn->proto_data = (void *)plugin;
 
+    plugin->connect_signals();
+
     plugin->start_login();
 }
 
 void PurpleLine::close() {
+    disconnect_signals();
+
     delete this;
+}
+
+void PurpleLine::connect_signals() {
+    purple_signal_connect(
+        purple_blist_get_handle(),
+        "blist-node-removed",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_blist_node_removed, signal)),
+        (void *)this);
+}
+
+void PurpleLine::disconnect_signals() {
+    purple_signal_disconnect(
+        purple_blist_get_handle(),
+        "blist-node-removed",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_blist_node_removed, signal)));
 }
 
 GList *PurpleLine::chat_info() {
@@ -428,7 +465,8 @@ void PurpleLine::handle_group_invite(
 
         GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
-        g_hash_table_insert(components, g_strdup("type"), g_strdup("group_invite"));
+        g_hash_table_insert(components, g_strdup("type"),
+            g_strdup(chat_type_to_string[ChatType::GROUP_INVITE].c_str()));
         g_hash_table_insert(components, g_strdup("id"), g_strdup(group.id.c_str()));
 
         // Invites on initial sync do not have inviter data
@@ -589,14 +627,13 @@ std::string PurpleLine::get_room_display_name(line::Room &room) {
             rcontacts.push_back(&contacts[rc.mid]);
     }
 
+    if (rcontacts.size() == 0)
+        return "Empty chat";
+
     std::stringstream ss;
     ss << "Chat with ";
 
     switch (rcontacts.size()) {
-        case 0:
-            ss << "nobody...?";
-            break;
-
         case 1:
             ss << rcontacts[0]->displayName;
             break;
@@ -682,15 +719,14 @@ void PurpleLine::join_chat(GHashTable *components) {
 
     std::string id(id_ptr);
 
-    char *type_ptr = (char *)g_hash_table_lookup(components, "type");
-    if (!type_ptr) {
-        purple_debug_warning("line", "Tried to join a chat with no type.");
+    ChatType type = get_chat_type((char *)g_hash_table_lookup(components, "type"));
+
+    if (type == ChatType::ANY) {
+        purple_debug_warning("line", "Tried to join a chat with weird type.");
         return;
     }
 
-    std::string type_str(type_ptr);
-
-    if (type_str == "group_invite") {
+    if (type == ChatType::GROUP_INVITE) {
         c_out->send_acceptGroupInvitation(0, id);
         c_out->send([this, id]{
             try {
@@ -718,18 +754,6 @@ void PurpleLine::join_chat(GHashTable *components) {
             });
         });
 
-        return;
-    }
-
-    ChatType type;
-
-    // >_>
-    if (type_str == chat_type_to_string[ChatType::GROUP]) {
-        type = ChatType::GROUP;
-    } else if (type_str == chat_type_to_string[ChatType::ROOM]) {
-        type = ChatType::ROOM;
-    } else {
-        purple_debug_warning("line", "Tried to join a chat with weird type.");
         return;
     }
 
@@ -786,7 +810,11 @@ void PurpleLine::reject_chat(GHashTable *components) {
 
     c_out->send_rejectGroupInvitation(0, id);
     c_out->send([this]() {
-        c_out->recv_rejectGroupInvitation();
+        try {
+            c_out->recv_rejectGroupInvitation();
+        } catch (line::TalkException &err) {
+            notify_error(err.reason);
+        }
     });
 }
 
@@ -823,11 +851,7 @@ int PurpleLine::send_message(std::string to, std::string text) {
                     (PurpleMessageFlags)PURPLE_MESSAGE_ERROR,
                     time(NULL));
             } else {
-                purple_notify_error(
-                    (void *)conn,
-                    "LINE error",
-                    msg.c_str(),
-                    nullptr);
+                notify_error(msg);
             }
 
             return;
@@ -843,6 +867,21 @@ int PurpleLine::send_message(std::string to, std::string text) {
 
 int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
     return send_message(who, markup_unescape(message));
+}
+
+void PurpleLine::remove_buddy(PurpleBuddy *buddy, PurpleGroup *) {
+    c_out->send_updateContactSetting(
+        0,
+        purple_buddy_get_name(buddy),
+        line::ContactSetting::CONTACT_SETTING_DELETE,
+        "true");
+    c_out->send([this]{
+        try {
+            c_out->recv_updateContactSetting();
+        } catch (line::TalkException &err) {
+            notify_error(std::string("Couldn't delete buddy: ") + err.reason);
+        }
+    });
 }
 
 void PurpleLine::chat_leave(int id) {
@@ -872,12 +911,59 @@ int PurpleLine::chat_send(int id, const char *message, PurpleMessageFlags flags)
     return send_message(purple_conversation_get_name(conv), markup_unescape(message));
 }
 
+PurpleChat *PurpleLine::find_blist_chat(const char *name) {
+    return blist_find_chat(name, ChatType::ANY);
+}
+
+void PurpleLine::signal_blist_node_removed(PurpleBlistNode *node) {
+    if (PURPLE_BLIST_NODE_IS_CHAT(node)) {
+        GHashTable *components = purple_chat_get_components(PURPLE_CHAT(node));
+
+        char *id_ptr = (char *)g_hash_table_lookup(components, "id");
+        if (!id_ptr) {
+            purple_debug_warning("line", "Tried to remove a chat with no id.");
+            return;
+        }
+
+        std::string id(id_ptr);
+
+        ChatType type = get_chat_type((char *)g_hash_table_lookup(components, "type"));
+
+        if (type == ChatType::ROOM) {
+            c_out->send_leaveRoom(0, id);
+            c_out->send([this]{
+                try {
+                    c_out->recv_leaveRoom();
+                } catch (line::TalkException &err) {
+                    notify_error(std::string("Couldn't leave from chat: ") + err.reason);
+                }
+            });
+        } else if (type == ChatType::GROUP) {
+            c_out->send_leaveGroup(0, id);
+            c_out->send([this]{
+                try {
+                    c_out->recv_leaveGroup();
+                } catch (line::TalkException &err) {
+                    notify_error(std::string("Couldn't leave from group: ") + err.reason);
+                }
+            });
+        } else {
+            purple_debug_warning("line", "Tried to remove a chat with no type.");
+            return;
+        }
+    }
+}
+
 void PurpleLine::push_recent_message(std::string id) {
     recent_messages.push_back(id);
     if (recent_messages.size() > 50)
         recent_messages.pop_front();
 }
 
-PurpleChat *PurpleLine::find_blist_chat(const char *name) {
-    return blist_find_chat(name, ChatType::ANY);
+void PurpleLine::notify_error(std::string msg) {
+    purple_notify_error(
+        (void *)conn,
+        "LINE error",
+        msg.c_str(),
+        nullptr);
 }

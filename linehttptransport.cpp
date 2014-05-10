@@ -60,7 +60,7 @@ void LineHttpTransport::open() {
         host.c_str(),
         port,
         WRAPPER(LineHttpTransport::ssl_connect),
-        WRAPPER_AT(LineHttpTransport::ssl_error, end),
+        WRAPPER_TYPE(LineHttpTransport::ssl_error, end),
         (gpointer)this);
 }
 

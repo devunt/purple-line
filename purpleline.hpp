@@ -38,6 +38,7 @@ enum class ChatType {
     ANY = 0,
     GROUP = 1,
     ROOM = 2,
+    GROUP_INVITE = 3,
 };
 
 class PurpleLine {
@@ -85,13 +86,21 @@ public:
     void close();
     GList *chat_info();
     int send_im(const char *who, const char *message, PurpleMessageFlags flags);
+    void remove_buddy(PurpleBuddy *buddy, PurpleGroup *);
     void join_chat(GHashTable *components);
     void reject_chat(GHashTable *components);
     void chat_leave(int id);
     int chat_send(int id, const char *message, PurpleMessageFlags flags);
     PurpleChat *find_blist_chat(const char *name);
 
+    void signal_blist_node_removed(PurpleBlistNode *node);
+
 private:
+
+    static ChatType get_chat_type(const char *type_ptr);
+
+    void connect_signals();
+    void disconnect_signals();
 
     // Login process methods, executed in this this order
     void start_login();
@@ -149,6 +158,8 @@ private:
 
     int send_message(std::string to, std::string text);
     void push_recent_message(std::string id);
+
+    void notify_error(std::string msg);
 
 };
 

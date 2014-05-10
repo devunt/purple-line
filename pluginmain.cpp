@@ -56,6 +56,7 @@ static void init_prpl_info(PurplePluginProtocolInfo &i) {
     i.login = &PurpleLine::login;
     i.close = WRAPPER(PurpleLine::close);
     i.chat_info = WRAPPER(PurpleLine::chat_info);
+    i.remove_buddy = WRAPPER(PurpleLine::remove_buddy);
     i.send_im = WRAPPER(PurpleLine::send_im);
     i.join_chat = WRAPPER(PurpleLine::join_chat);
     i.reject_chat = WRAPPER(PurpleLine::reject_chat);
