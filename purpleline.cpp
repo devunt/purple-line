@@ -234,6 +234,9 @@ void PurpleLine::get_profile() {
     c_out->send([this]() {
         c_out->recv_getProfile(profile);
 
+        profile_contact.mid = profile.mid;
+        profile_contact.displayName = profile.displayName;
+
         // Update display name
         purple_account_set_alias(acct, profile.displayName.c_str());
 
@@ -380,10 +383,84 @@ void PurpleLine::update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list) {
     for (PurpleChat *chat: chats_to_delete)
         purple_blist_remove_chat(chat);
 
-    // Start up return channel
+    get_group_invites();
+}
+
+void PurpleLine::get_group_invites() {
+    c_out->send_getGroupIdsInvited();
+    c_out->send([this]() {
+        std::vector<std::string> gids;
+        c_out->recv_getGroupIdsInvited(gids);
+
+        if (gids.size() == 0) {
+            sync_done();
+            return;
+        }
+
+        c_out->send_getGroups(gids);
+        c_out->send([this]() {
+            std::vector<line::Group> groups;
+            c_out->recv_getGroups(groups);
+
+            for (line::Group &g: groups)
+                handle_group_invite(g, profile_contact, no_contact);
+
+            sync_done();
+        });
+    });
+}
+
+void PurpleLine::sync_done() {
     poller.start();
 
     purple_connection_update_progress(conn, "Connected", 2, 3);
+}
+
+void PurpleLine::handle_group_invite(
+    line::Group &group,
+    line::Contact &invitee,
+    line::Contact &inviter)
+{
+    blist_update_buddy(invitee, true);
+
+    if (invitee.mid == profile.mid) {
+        // Current user was invited - show popup
+
+        GHashTable *components = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+
+        g_hash_table_insert(components, g_strdup("type"), g_strdup("group_invite"));
+        g_hash_table_insert(components, g_strdup("id"), g_strdup(group.id.c_str()));
+
+        // Invites on initial sync do not have inviter data
+        std::string who = (inviter.__isset.mid)
+            ? inviter.displayName
+            : std::string("A member");
+
+        serv_got_chat_invite(
+            conn,
+            group.name.c_str(),
+            who.c_str(),
+            nullptr,
+            components);
+    } else {
+        // Another user was invited - if a chat is open, add the user
+
+        PurpleConversation *conv = purple_find_conversation_with_account(
+            PURPLE_CONV_TYPE_CHAT,
+            group.id.c_str(),
+            acct);
+
+        if (conv) {
+            std::string msg = "Invited by " + inviter.displayName;
+
+            purple_conv_chat_add_user(
+                PURPLE_CONV_CHAT(conv),
+                invitee.mid.c_str(),
+                msg.c_str(),
+                PURPLE_CBFLAGS_AWAY,
+                TRUE);
+        }
+    }
 }
 
 // TODO: Refactor this, it's about to become a mess
@@ -597,16 +674,56 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Room &room) {
 }
 
 void PurpleLine::join_chat(GHashTable *components) {
+    char *id_ptr = (char *)g_hash_table_lookup(components, "id");
+    if (!id_ptr) {
+        purple_debug_warning("line", "Tried to join a chat with no id.");
+        return;
+    }
+
+    std::string id(id_ptr);
+
     char *type_ptr = (char *)g_hash_table_lookup(components, "type");
     if (!type_ptr) {
         purple_debug_warning("line", "Tried to join a chat with no type.");
         return;
     }
 
+    std::string type_str(type_ptr);
+
+    if (type_str == "group_invite") {
+        c_out->send_acceptGroupInvitation(0, id);
+        c_out->send([this, id]{
+            try {
+                c_out->recv_acceptGroupInvitation();
+            } catch (line::TalkException &err) {
+                purple_notify_warning(
+                    (void *)conn,
+                    "Failed to join LINE group",
+                    "Your invitation was probably cancelled.",
+                    err.reason.c_str());
+                return;
+            }
+
+            c_out->send_getGroup(id);
+            c_out->send([this]{
+                line::Group group;
+                c_out->recv_getGroup(group);
+
+                if (!group.__isset.id) {
+                    purple_debug_warning("line", "Couldn't get group: %s", group.id.c_str());
+                    return;
+                }
+
+                join_chat_success(ChatType::GROUP, group.id);
+            });
+        });
+
+        return;
+    }
+
     ChatType type;
 
     // >_>
-    std::string type_str(type_ptr);
     if (type_str == chat_type_to_string[ChatType::GROUP]) {
         type = ChatType::GROUP;
     } else if (type_str == chat_type_to_string[ChatType::ROOM]) {
@@ -616,14 +733,10 @@ void PurpleLine::join_chat(GHashTable *components) {
         return;
     }
 
-    char *id_ptr = (char *)g_hash_table_lookup(components, "id");
-    if (!id_ptr) {
-        purple_debug_warning("line", "Tried to join a chat with no id.");
-        return;
-    }
+    join_chat_success(type, id);
+}
 
-    std::string id(id_ptr);
-
+void PurpleLine::join_chat_success(ChatType type, std::string id) {
     // Assume chat is on buddy list for now.
 
     int purple_id = next_purple_id++;
@@ -631,7 +744,7 @@ void PurpleLine::join_chat(GHashTable *components) {
     PurpleConversation *conv = serv_got_joined_chat(
         conn,
         purple_id,
-        (char *)g_hash_table_lookup(components, "id"));
+        id.c_str());
 
     if (type == ChatType::GROUP) {
         line::Group &group = groups[id];
@@ -659,6 +772,21 @@ void PurpleLine::join_chat(GHashTable *components) {
 
             //push_recent_message(msg.id);
         }
+    });
+}
+
+void PurpleLine::reject_chat(GHashTable *components) {
+    char *id_ptr = (char *)g_hash_table_lookup(components, "id");
+    if (!id_ptr) {
+        purple_debug_warning("line", "Tried to reject an invitation with no id.");
+        return;
+    }
+
+    std::string id(id_ptr);
+
+    c_out->send_rejectGroupInvitation(0, id);
+    c_out->send([this]() {
+        c_out->recv_rejectGroupInvitation();
     });
 }
 

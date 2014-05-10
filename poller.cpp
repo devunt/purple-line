@@ -65,8 +65,9 @@ void Poller::fetch_operations() {
                     parent.blist_update_chat(op.param1, ChatType::GROUP);
                     break;
 
-                // case line::OpType::NOTIFIED_INVITE_INTO_GROUP: // 13
-                    // TODO
+                case line::OpType::NOTIFIED_INVITE_INTO_GROUP: // 13
+                    op_notified_invite_into_group(op);
+                    break;
 
                 case line::OpType::LEAVE_GROUP: // 14
                     parent.blist_remove_chat(op.param1, ChatType::GROUP);
@@ -77,7 +78,6 @@ void Poller::fetch_operations() {
                     break;
 
                 case line::OpType::ACCEPT_GROUP_INVITATION: // 16
-                    // TODO: When NOTIFIED_INIVITE_INTO_GROUP is implemented, hide group invitation
                     parent.blist_update_chat(op.param1, ChatType::GROUP);
                     break;
 
@@ -113,6 +113,11 @@ void Poller::fetch_operations() {
 
                 case line::OpType::RECEIVE_MESSAGE: // 26
                     parent.handle_message(op.message, false, false);
+                    break;
+
+                case line::OpType::CANCEL_INVITATION_GROUP: // 31
+                case line::OpType::NOTIFIED_CANCEL_INVITATION_GROUP: // 32
+                    parent.blist_update_chat(op.param1, ChatType::GROUP);
                     break;
 
                 case line::OpType::DUMMY: // 48;
@@ -161,7 +166,36 @@ void Poller::op_notified_kickout_from_group(line::Operation &op) {
             conv,
             op.param3.c_str(),
             msg.c_str(),
-            (PurpleMessageFlags)PURPLE_MESSAGE_SYSTEM,
+            PURPLE_MESSAGE_SYSTEM,
             time(NULL));
     }
+}
+
+void Poller::op_notified_invite_into_group(line::Operation &op) {
+    // TODO: Maybe use cached objects instead of re-requesting every time
+
+    parent.c_out->send_getGroup(op.param1);
+    parent.c_out->send([this, op]{
+        line::Group group;
+        parent.c_out->recv_getGroup(group);
+
+        if (!group.__isset.id) {
+            purple_debug_warning("line", "Invited into unknown group: %s\n", op.param1.c_str());
+            return;
+        }
+
+        parent.c_out->send_getContact(op.param2);
+        parent.c_out->send([this, group, op]() mutable {
+            line::Contact inviter;
+            parent.c_out->recv_getContact(inviter);
+
+            parent.c_out->send_getContact(op.param3);
+            parent.c_out->send([this, group, inviter, op]() mutable {
+                line::Contact invitee;
+                parent.c_out->recv_getContact(invitee);
+
+                parent.handle_group_invite(group, invitee, inviter);
+            });
+        });
+    });
 }

@@ -61,6 +61,8 @@ class PurpleLine {
     std::deque<std::string> recent_messages;
 
     line::Profile profile;
+    line::Contact profile_contact; // contains some fields from profile
+    line::Contact no_contact; // empty object
     std::map<std::string, line::Group> groups;
     std::map<std::string, line::Room> rooms;
     std::map<std::string, line::Contact> contacts;
@@ -84,6 +86,7 @@ public:
     GList *chat_info();
     int send_im(const char *who, const char *message, PurpleMessageFlags flags);
     void join_chat(GHashTable *components);
+    void reject_chat(GHashTable *components);
     void chat_leave(int id);
     int chat_send(int id, const char *message, PurpleMessageFlags flags);
     PurpleChat *find_blist_chat(const char *name);
@@ -106,8 +109,13 @@ private:
     void get_groups();
     void get_rooms();
     void update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list);
+    void get_group_invites();
+    void sync_done();
+
+    void join_chat_success(ChatType type, std::string id);
 
     void handle_message(line::Message &msg, bool sent, bool replay);
+    void handle_group_invite(line::Group &group, line::Contact &invitee, line::Contact &inviter);
 
     template <typename T>
     std::set<T *> blist_find(std::function<bool(T *)> predicate);

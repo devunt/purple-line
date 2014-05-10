@@ -35,6 +35,8 @@ private:
 
     // Long poll return channel
     void fetch_operations();
+
     void op_notified_kickout_from_group(line::Operation &op);
+    void op_notified_invite_into_group(line::Operation &op);
 
 };
