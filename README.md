@@ -45,6 +45,10 @@ Implemented
   * Joining groups
   * Leaving groups
 * Buddy icons
+* Editing buddy list
+ * Removing friends
+ * Leaving chats
+ * Leaving groups
 
 To do
 -----
@@ -55,14 +59,11 @@ To do
   * Sync group/chat users more gracefully, show people joining/leaving
 * Editing buddy list
   * Adding friends (needs search function)
-  * Removing friends
+  * Creating chats
+  * Inviting people to chats
   * Creating groups
   * Updating groups
   * Inviting people to groups
-  * Leaving groups
-  * Creating chats
-  * Inviting people to chats
-  * Leaving chats
 * Changing your account icon
 * Other message types
   * Images: Thumbnail should be easy
