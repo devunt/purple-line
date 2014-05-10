@@ -259,16 +259,23 @@ void PurpleLine::blist_update_chat(std::string id, ChatType type) {
     blist_ensure_chat(id.c_str(), type);
 
     if (type == ChatType::GROUP) {
-        c_out->send_getGroups(std::vector<std::string> { id });
-        c_out->send([this, type]{
-            std::vector<line::Group> groups;
-            c_out->recv_getGroups(groups);
+        c_out->send_getGroup(id );
+        c_out->send([this]{
+            line::Group group;
+            c_out->recv_getGroup(group);
 
-            if (groups.size() == 1)
-                blist_update_chat(groups[0]);
+            if (group.__isset.id)
+                blist_update_chat(group);
         });
     } else if (type == ChatType::ROOM) {
-        purple_debug_warning("line", "ROOM: TODO\n");
+        c_out->send_getRoom(id);
+        c_out->send([this]{
+            line::Room room;
+            c_out->recv_getRoom(room);
+
+            if (room.__isset.mid)
+                blist_update_chat(room);
+        });
     }
 }
 

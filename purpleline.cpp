@@ -4,6 +4,7 @@
 
 #include <conversation.h>
 #include <request.h>
+#include <notify.h>
 #include <debug.h>
 #include <sslconn.h>
 #include <util.h>
@@ -508,6 +509,8 @@ void PurpleLine::fetch_operations() {
         c_in->recv_fetchOperations(operations);
 
         for (line::Operation &op: operations) {
+            // TODO: This switch is becoming a mess
+
             switch (op.type) {
                 case line::OpType::END_OF_OPERATION: // 0
                     break;
@@ -524,13 +527,84 @@ void PurpleLine::fetch_operations() {
                     blist_update_buddy(op.param1);
                     break;
 
+                case line::OpType::CREATE_GROUP: // 9
+                case line::OpType::UPDATE_GROUP: // 10
+                case line::OpType::NOTIFIED_UPDATE_GROUP: // 11
+                case line::OpType::INVITE_INTO_GROUP: // 12
+                    blist_update_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                // case line::OpType::NOTIFIED_INVITE_INTO_GROUP: // 13
+                    // TODO
+
                 case line::OpType::LEAVE_GROUP: // 14
                     blist_remove_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                case line::OpType::NOTIFIED_LEAVE_GROUP: // 15
+                    blist_update_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                case line::OpType::ACCEPT_GROUP_INVITATION: // 16
+                    // TODO: When NOTIFIED_INIVITE_INTO_GROUP is implemented, hide group invitation
+                    blist_update_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                case line::OpType::NOTIFIED_ACCEPT_GROUP_INVITATION: // 17
+                case line::OpType::KICKOUT_FROM_GROUP: // 18
+                    blist_update_chat(op.param1, ChatType::GROUP);
+                    break;
+
+                case line::OpType::NOTIFIED_KICKOUT_FROM_GROUP: // 19
+                    {
+                        std::string msg;
+
+                        if (op.param3 == profile.mid) {
+                            msg = "You were removed from the group by ";
+                            blist_remove_chat(op.param1, ChatType::GROUP);
+                        } else {
+                            msg = "Removed from the group by ";
+                            blist_update_chat(op.param1, ChatType::GROUP);
+                        }
+
+                        if (contacts.count(op.param2) == 1)
+                            msg += contacts[op.param2].displayName;
+                        else
+                            msg += "(unknown contact)";
+
+                        PurpleConversation *conv = purple_find_conversation_with_account(
+                            PURPLE_CONV_TYPE_CHAT,
+                            op.param1.c_str(),
+                            acct);
+
+                        if (conv) {
+                            purple_conversation_write(
+                                conv,
+                                op.param3.c_str(),
+                                msg.c_str(),
+                                (PurpleMessageFlags)PURPLE_MESSAGE_SYSTEM,
+                                time(NULL));
+                        }
+                    }
+
+                    break;
+
+                case line::OpType::CREATE_ROOM: // 20
+                case line::OpType::INVITE_INTO_ROOM: // 21
+                    blist_update_chat(op.param1, ChatType::ROOM);
+                    break;
+
+                case line::OpType::NOTIFIED_INVITE_INTO_ROOM: // 22
+                    // TODO: Perhaps show who invited the user (param2)
+                    blist_update_chat(op.param1, ChatType::ROOM);
                     break;
 
                 case line::OpType::LEAVE_ROOM: // 23
                     blist_remove_chat(op.param1, ChatType::ROOM);
                     break;
+
+                case line::OpType::NOTIFIED_LEAVE_ROOM: // 24
+                    blist_update_chat(op.param1, ChatType::ROOM);
 
                 case line::OpType::SEND_MESSAGE: // 25
                     handle_message(op.message, true, false);
@@ -713,21 +787,25 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Group &group)
     GList *users = NULL, *flags = NULL;
 
     for (line::Contact &c: group.members) {
-        blist_update_buddy(c, true);
+        line::Contact &contact = get_up_to_date_contact(c);
+
+        blist_update_buddy(contact, true);
 
         int cbflags = 0;
 
-        if (c.mid == group.creator.mid)
+        if (contact.mid == group.creator.mid)
             cbflags |= PURPLE_CBFLAGS_FOUNDER;
 
-        users = g_list_prepend(users, (gpointer)c.mid.c_str());
+        users = g_list_prepend(users, (gpointer)contact.mid.c_str());
         flags = g_list_prepend(flags, GINT_TO_POINTER(cbflags));
     }
 
     for (line::Contact &c: group.invitee) {
-        blist_update_buddy(c, true);
+        line::Contact &contact = get_up_to_date_contact(c);
 
-        users = g_list_prepend(users, (gpointer)c.mid.c_str());
+        blist_update_buddy(contact, true);
+
+        users = g_list_prepend(users, (gpointer)contact.mid.c_str());
         flags = g_list_prepend(flags, GINT_TO_POINTER(PURPLE_CBFLAGS_AWAY));
     }
 
@@ -744,7 +822,9 @@ void PurpleLine::set_chat_participants(PurpleConvChat *chat, line::Room &room) {
 
     for (line::Contact &rc: room.contacts) {
         // Room contacts don't have full contact information.
-        if (contacts.count(rc.mid) == 1)
+        if (contacts.count(rc.mid) == 0)
+            blist_update_buddy(rc.mid, true);
+        else
             blist_update_buddy(contacts[rc.mid], true);
 
         users = g_list_prepend(users, (gpointer)rc.mid.c_str());
@@ -825,6 +905,10 @@ void PurpleLine::join_chat(GHashTable *components) {
             //push_recent_message(msg.id);
         }
     });
+}
+
+line::Contact &PurpleLine::get_up_to_date_contact(line::Contact &c) {
+    return (contacts.count(c.mid) != 0) ? contacts[c.mid] : c;
 }
 
 int PurpleLine::send_message(std::string to, std::string text) {

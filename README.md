@@ -39,8 +39,10 @@ Implemented
   * Adding friends
   * Blocking friends
   * Removing friends
-  * Leaving groups
+  * Joining chats
   * Leaving chats
+  * Joining groups
+  * Leaving groups
 * Buddy icons
 
 To do
@@ -50,8 +52,7 @@ To do
   * For IMs
 * Synchronize buddy list on the fly
   * Group invitations
-  * Joining groups
-  * Joining chats
+  * Sync group/chat users more gracefully, show people joining/leaving
 * Editing buddy list
   * Adding friends (needs search function)
   * Removing friends

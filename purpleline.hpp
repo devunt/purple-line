@@ -149,6 +149,8 @@ private:
     void set_chat_participants(PurpleConvChat *chat, line::Room &room);
     void set_chat_participants(PurpleConvChat *chat, line::Group &group);
 
+    line::Contact &get_up_to_date_contact(line::Contact &c);
+
     int send_message(std::string to, std::string text);
     void push_recent_message(std::string id);
 
