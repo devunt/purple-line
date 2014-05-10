@@ -1,4 +1,5 @@
 #include <iostream>
+#include <functional>
 
 #include <time.h>
 
@@ -13,7 +14,7 @@
 #include "purpleline.hpp"
 #include "wrapper.hpp"
 
-const char *LINE_CERTIFICATE = "line-certificate";
+#define LINE_ACCOUNT_CERTIFICATE "line-certificate"
 
 static std::string markup_escape(std::string const &text) {
     gchar *escaped = purple_markup_escape_text(text.c_str(), text.size());
@@ -31,24 +32,24 @@ static std::string markup_unescape(std::string const &markup) {
     return result;
 }
 
-std::map<PurpleLine::ChatType, std::string> PurpleLine::chat_type_to_string {
-    { PurpleLine::ChatType::GROUP, "group" },
-    { PurpleLine::ChatType::ROOM, "room" },
+std::map<ChatType, std::string> PurpleLine::chat_type_to_string {
+    { ChatType::GROUP, "group" },
+    { ChatType::ROOM, "room" },
 };
 
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     conn(conn),
     acct(acct),
+    poller(*this),
+    pin_verifier(*this),
     next_purple_id(1)
 {
     c_out = boost::make_shared<ThriftClient>(acct, conn, "/api/v4/TalkService.do");
-    c_in = boost::make_shared<ThriftClient>(acct, conn, "/P4");
     http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, false);
 }
 
 PurpleLine::~PurpleLine() {
     c_out->close();
-    c_in->close();
     http_os->close();
 }
 
@@ -152,7 +153,7 @@ void PurpleLine::start_login() {
     purple_connection_set_state(conn, PURPLE_CONNECTING);
     purple_connection_update_progress(conn, "Logging in", 0, 3);
 
-    std::string certificate(purple_account_get_string(acct, LINE_CERTIFICATE, ""));
+    std::string certificate(purple_account_get_string(acct, LINE_ACCOUNT_CERTIFICATE, ""));
 
     c_out->send_loginWithIdentityCredentialForCertificate(
         line::IdentityProvider::LINE,
@@ -183,7 +184,16 @@ void PurpleLine::start_login() {
         }
         else if (result.type == line::LoginResultType::REQUIRE_DEVICE_CONFIRM)
         {
-            pin_verification(result);
+            pin_verifier.verify(result, [this](std::string auth_token, std::string certificate) {
+                if (certificate != "") {
+                    purple_account_set_string(
+                        acct,
+                        LINE_ACCOUNT_CERTIFICATE,
+                        certificate.c_str());
+                }
+
+                got_auth_token(auth_token);
+            });
         }
         else
         {
@@ -198,125 +208,13 @@ void PurpleLine::start_login() {
     });
 }
 
-void PurpleLine::pin_verification(line::LoginResult result) {
-    const int minutes = 3;
-
-    const std::string verifier = result.verifier;
-
-    std::stringstream ss;
-    ss
-        << result.pinCode
-        << "\n\nThe number has to be entered into the LINE mobile application within "
-        << minutes
-        << " minutes. If the time runs out, reconnect to try again."
-        << "\n\nYou will only have to verify your account once per computer.";
-    std::string pin_msg = ss.str();
-
-    pin_ui_handle = purple_request_action(
-        (void *)conn,
-        "LINE account verification",
-        "Enter this number on your mobile device",
-        pin_msg.c_str(),
-        0,
-        acct,
-        nullptr,
-        nullptr,
-        (gpointer)this,
-        1,
-        "Cancel",
-        (PurpleRequestActionCb)WRAPPER(PurpleLine::pin_verification_cancel));
-
-    pin_timeout = purple_timeout_add_seconds(
-        minutes * 60,
-        WRAPPER(PurpleLine::pin_verification_timeout),
-        (gpointer)this);
-
-    http_pin = boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, false);
-    http_pin->set_auth_token(verifier);
-
-    http_pin->request("GET", "/Q", [this, verifier]() {
-        if (http_pin->status_code() != 200) {
-            std::stringstream ss;
-            ss << "Account verification failed: invalid status code: " << http_pin->status_code();
-
-            pin_verification_error(ss.str());
-            return;
-        }
-
-        std::string json((size_t)http_pin->content_length(), '\0');
-        http_pin->read((uint8_t *)&json[0], json.size());
-
-        // Don't feel like invoking an entire JSON parser for this, this should be good enough.
-        if (json.find("\"QRCODE_VERIFIED\"") == std::string::npos) {
-            pin_verification_error("Account verification failed: server would not verify.");
-            return;
-        }
-
-        c_out->send_loginWithVerifierForCertificate(verifier);
-        c_out->send([this, verifier]() {
-            line::LoginResult result;
-
-            try {
-                c_out->recv_loginWithVerifierForCertificate(result);
-            } catch (line::TalkException &err) {
-                pin_verification_error("Account verification failed: Exception: " + err.reason);
-                return;
-            }
-
-            if (result.authToken == "") {
-                pin_verification_error("Account verification failed: no auth token.");
-                return;
-            }
-
-            if (result.certificate != "")
-                purple_account_set_string(acct, LINE_CERTIFICATE, result.certificate.c_str());
-
-            pin_verification_end();
-
-            got_auth_token(result.authToken);
-        });
-    });
-}
-
-int PurpleLine::pin_verification_timeout() {
-    pin_verification_error("Account verification timed out.");
-
-    return FALSE;
-}
-
-void PurpleLine::pin_verification_cancel(int) {
-    pin_verification_error("Account verification cancelled.");
-}
-
-void PurpleLine::pin_verification_end() {
-    http_pin.reset();
-
-    if (pin_timeout) {
-        purple_timeout_remove(pin_timeout);
-        pin_timeout = 0;
-    }
-
-    if (pin_ui_handle) {
-        purple_request_close(PURPLE_REQUEST_ACTION, pin_ui_handle);
-        pin_ui_handle = nullptr;
-    }
-}
-
-void PurpleLine::pin_verification_error(std::string error) {
-    pin_verification_end();
-
-    purple_connection_error(
-        conn,
-        error.c_str());
-}
-
 void PurpleLine::got_auth_token(std::string auth_token) {
     // Re-open output client to update persistent headers
     c_out->close();
     c_out->set_path("/S4");
 
     c_out->set_auth_token(auth_token);
-    c_in->set_auth_token(auth_token);
+    poller.set_auth_token(auth_token);
     http_os->set_auth_token(auth_token);
 
     get_last_op_revision();
@@ -325,7 +223,7 @@ void PurpleLine::got_auth_token(std::string auth_token) {
 void PurpleLine::get_last_op_revision() {
     c_out->send_getLastOpRevision();
     c_out->send([this]() {
-        local_rev = c_out->recv_getLastOpRevision();
+        poller.set_local_rev(c_out->recv_getLastOpRevision());
 
         get_profile();
     });
@@ -482,153 +380,10 @@ void PurpleLine::update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list) {
         purple_blist_remove_chat(chat);
 
     // Start up return channel
-    fetch_operations();
+    poller.start();
 
     purple_connection_set_state(conn, PURPLE_CONNECTED);
     purple_connection_update_progress(conn, "Connected", 2, 3);
-}
-
-void PurpleLine::fetch_operations() {
-    c_in->send_fetchOperations(local_rev, 50);
-    c_in->send([this]() {
-        int status = c_in->status_code();
-
-        if (status == -1) {
-            // Plugin closing
-            return;
-        } else if (status == 410) {
-            // Long poll timeout, resend
-            fetch_operations();
-            return;
-        } else if (status != 200) {
-            purple_debug_warning("line", "fetchOperations error %d. TODO: Retry after a timeout", status);
-            return;
-        }
-
-        std::vector<line::Operation> operations;
-        c_in->recv_fetchOperations(operations);
-
-        for (line::Operation &op: operations) {
-            // TODO: This switch is becoming a mess
-
-            switch (op.type) {
-                case line::OpType::END_OF_OPERATION: // 0
-                    break;
-
-                case line::OpType::ADD_CONTACT: // 4
-                    blist_update_buddy(op.param1);
-                    break;
-
-                case line::OpType::BLOCK_CONTACT: // 6
-                    blist_remove_buddy(op.param1);
-                    break;
-
-                case line::OpType::UNBLOCK_CONTACT: // 7
-                    blist_update_buddy(op.param1);
-                    break;
-
-                case line::OpType::CREATE_GROUP: // 9
-                case line::OpType::UPDATE_GROUP: // 10
-                case line::OpType::NOTIFIED_UPDATE_GROUP: // 11
-                case line::OpType::INVITE_INTO_GROUP: // 12
-                    blist_update_chat(op.param1, ChatType::GROUP);
-                    break;
-
-                // case line::OpType::NOTIFIED_INVITE_INTO_GROUP: // 13
-                    // TODO
-
-                case line::OpType::LEAVE_GROUP: // 14
-                    blist_remove_chat(op.param1, ChatType::GROUP);
-                    break;
-
-                case line::OpType::NOTIFIED_LEAVE_GROUP: // 15
-                    blist_update_chat(op.param1, ChatType::GROUP);
-                    break;
-
-                case line::OpType::ACCEPT_GROUP_INVITATION: // 16
-                    // TODO: When NOTIFIED_INIVITE_INTO_GROUP is implemented, hide group invitation
-                    blist_update_chat(op.param1, ChatType::GROUP);
-                    break;
-
-                case line::OpType::NOTIFIED_ACCEPT_GROUP_INVITATION: // 17
-                case line::OpType::KICKOUT_FROM_GROUP: // 18
-                    blist_update_chat(op.param1, ChatType::GROUP);
-                    break;
-
-                case line::OpType::NOTIFIED_KICKOUT_FROM_GROUP: // 19
-                    {
-                        std::string msg;
-
-                        if (op.param3 == profile.mid) {
-                            msg = "You were removed from the group by ";
-                            blist_remove_chat(op.param1, ChatType::GROUP);
-                        } else {
-                            msg = "Removed from the group by ";
-                            blist_update_chat(op.param1, ChatType::GROUP);
-                        }
-
-                        if (contacts.count(op.param2) == 1)
-                            msg += contacts[op.param2].displayName;
-                        else
-                            msg += "(unknown contact)";
-
-                        PurpleConversation *conv = purple_find_conversation_with_account(
-                            PURPLE_CONV_TYPE_CHAT,
-                            op.param1.c_str(),
-                            acct);
-
-                        if (conv) {
-                            purple_conversation_write(
-                                conv,
-                                op.param3.c_str(),
-                                msg.c_str(),
-                                (PurpleMessageFlags)PURPLE_MESSAGE_SYSTEM,
-                                time(NULL));
-                        }
-                    }
-
-                    break;
-
-                case line::OpType::CREATE_ROOM: // 20
-                case line::OpType::INVITE_INTO_ROOM: // 21
-                    blist_update_chat(op.param1, ChatType::ROOM);
-                    break;
-
-                case line::OpType::NOTIFIED_INVITE_INTO_ROOM: // 22
-                    // TODO: Perhaps show who invited the user (param2)
-                    blist_update_chat(op.param1, ChatType::ROOM);
-                    break;
-
-                case line::OpType::LEAVE_ROOM: // 23
-                    blist_remove_chat(op.param1, ChatType::ROOM);
-                    break;
-
-                case line::OpType::NOTIFIED_LEAVE_ROOM: // 24
-                    blist_update_chat(op.param1, ChatType::ROOM);
-
-                case line::OpType::SEND_MESSAGE: // 25
-                    handle_message(op.message, true, false);
-                    break;
-
-                case line::OpType::RECEIVE_MESSAGE: // 26
-                    handle_message(op.message, false, false);
-                    break;
-
-                case line::OpType::UPDATE_CONTACT: // 49
-                    blist_update_buddy(op.param1);
-                    break;
-
-                default:
-                    purple_debug_warning("line", "Unhandled operation type: %d\n", op.type);
-                    break;
-            }
-
-            if (op.revision > local_rev)
-                local_rev = op.revision;
-        }
-
-        fetch_operations();
-    });
 }
 
 // TODO: Refactor this, it's about to become a mess

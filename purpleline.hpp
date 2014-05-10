@@ -8,6 +8,8 @@
 #include <prpl.h>
 
 #include "thriftclient.hpp"
+#include "poller.hpp"
+#include "pinverifier.hpp"
 
 #define LINEPRPL_ID "prpl-mvirkkunen-line"
 
@@ -32,23 +34,27 @@ struct _blist_node_type<PurpleChat> {
     }
 };
 
-class PurpleLine {
+enum class ChatType {
+    ANY = 0,
+    GROUP = 1,
+    ROOM = 2,
+};
 
-    enum class ChatType {
-        ANY = 0,
-        GROUP = 1,
-        ROOM = 2,
-    };
+class PurpleLine {
 
     static std::map<ChatType, std::string> chat_type_to_string;
 
     PurpleConnection *conn;
     PurpleAccount *acct;
 
-    boost::shared_ptr<ThriftClient> c_out, c_in;
-    boost::shared_ptr<LineHttpTransport> http_os, http_pin;
+    boost::shared_ptr<ThriftClient> c_out;
+    boost::shared_ptr<LineHttpTransport> http_os;
 
-    int64_t local_rev;
+    friend class Poller;
+    Poller poller;
+
+    friend class PINVerifier;
+    PINVerifier pin_verifier;
 
     int next_purple_id;
 
@@ -101,28 +107,10 @@ private:
     void get_rooms();
     void update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list);
 
-    // Long poll return channel
-    void fetch_operations();
     void handle_message(line::Message &msg, bool sent, bool replay);
 
     template <typename T>
-    std::set<T *> blist_find(std::function<bool(T *)> predicate) {
-        std::set<T *> results;
-
-        for (PurpleBlistNode *node = purple_blist_get_root();
-            node;
-            node = purple_blist_node_next(node, FALSE))
-        {
-            if (_blist_node_type<T>::get_account((T *)node) == acct
-                && purple_blist_node_get_type(node) == _blist_node_type<T>::type
-                && predicate((T *)node))
-            {
-                results.insert((T *)node);
-            }
-        }
-
-        return results;
-    }
+    std::set<T *> blist_find(std::function<bool(T *)> predicate);
 
     template <typename T>
     std::set<T *> blist_find() {
@@ -155,3 +143,22 @@ private:
     void push_recent_message(std::string id);
 
 };
+
+template <typename T>
+std::set<T *> PurpleLine::blist_find(std::function<bool(T *)> predicate) {
+    std::set<T *> results;
+
+    for (PurpleBlistNode *node = purple_blist_get_root();
+        node;
+        node = purple_blist_node_next(node, FALSE))
+    {
+        if (_blist_node_type<T>::get_account((T *)node) == acct
+            && purple_blist_node_get_type(node) == _blist_node_type<T>::type
+            && predicate((T *)node))
+        {
+            results.insert((T *)node);
+        }
+    }
+
+    return results;
+}
