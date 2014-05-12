@@ -4,13 +4,14 @@
 
 #include <debug.h>
 
+#include "constants.hpp"
 #include "poller.hpp"
 #include "purpleline.hpp"
 
 Poller::Poller(PurpleLine &parent)
     : parent(parent)
 {
-    client = boost::make_shared<ThriftClient>(parent.acct, parent.conn, "/P4");
+    client = boost::make_shared<ThriftClient>(parent.acct, parent.conn, LINE_POLL_PATH);
 }
 
 Poller::~Poller() {

@@ -7,7 +7,9 @@
 #include <plugin.h>
 #include <prpl.h>
 
+#include "constants.hpp"
 #include "thriftclient.hpp"
+#include "httpclient.hpp"
 #include "poller.hpp"
 #include "pinverifier.hpp"
 
@@ -49,7 +51,8 @@ class PurpleLine {
     PurpleAccount *acct;
 
     boost::shared_ptr<ThriftClient> c_out;
-    boost::shared_ptr<LineHttpTransport> http_os;
+
+    HTTPClient http;
 
     friend class Poller;
     Poller poller;

@@ -56,17 +56,16 @@ ChatType PurpleLine::get_chat_type(const char *type_ptr) {
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
     conn(conn),
     acct(acct),
+    http(acct),
     poller(*this),
     pin_verifier(*this),
     next_purple_id(1)
 {
-    c_out = boost::make_shared<ThriftClient>(acct, conn, "/api/v4/TalkService.do");
-    http_os = boost::make_shared<LineHttpTransport>(acct, conn, "os.line.naver.jp", 443, false);
+    c_out = boost::make_shared<ThriftClient>(acct, conn, LINE_LOGIN_PATH);
 }
 
 PurpleLine::~PurpleLine() {
     c_out->close();
-    http_os->close();
 }
 
 const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
@@ -248,11 +247,11 @@ void PurpleLine::start_login() {
 void PurpleLine::got_auth_token(std::string auth_token) {
     // Re-open output client to update persistent headers
     c_out->close();
-    c_out->set_path("/S4");
+    c_out->set_path(LINE_COMMAND_PATH);
 
     c_out->set_auth_token(auth_token);
     poller.set_auth_token(auth_token);
-    http_os->set_auth_token(auth_token);
+    http.set_auth_token(auth_token);
 
     get_last_op_revision();
 }
@@ -283,16 +282,18 @@ void PurpleLine::get_profile() {
         // Update account icon (not sure if there's a way to tell whether it has changed, maybe
         // pictureStatus?)
         if (profile.picturePath != "") {
-            std::string pic_path = profile.picturePath + "/preview";
+            std::string pic_path = profile.picturePath.substr(1) + "/preview";
             //if (icon_path != purple_account_get_string(acct, "icon_path", "")) {
-                http_os->request("GET", pic_path, [this, pic_path]{
-                    guchar *buffer = (guchar *)malloc(http_os->content_length() * sizeof(guchar));
-                    http_os->read(buffer, http_os->content_length());
+                http.request_auth(LINE_OS_URL + pic_path,
+                    [this](int status, const guchar *data, gsize len)
+                {
+                    if (status != 200 || !data)
+                        return;
 
                     purple_buddy_icons_set_account_icon(
                         acct,
-                        (guchar *)buffer,
-                        (size_t)http_os->content_length());
+                        (guchar *)g_memdup(data, len),
+                        len);
 
                     //purple_account_set_string(acct, "icon_path", icon_path.c_str());
                 });

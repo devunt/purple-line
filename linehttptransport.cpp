@@ -1,5 +1,3 @@
-#include "linehttptransport.hpp"
-
 #include <sstream>
 #include <limits>
 
@@ -9,8 +7,8 @@
 
 #include "thrift_line/line_types.h"
 
-#define USER_AGENT "purple-line (LINE for libpurple/Pidgin/Finch)"
-#define APPLICATION_NAME "DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64"
+#include "constants.hpp"
+#include "linehttptransport.hpp"
 
 LineHttpTransport::LineHttpTransport(
         PurpleAccount *acct,
@@ -142,8 +140,8 @@ void LineHttpTransport::send_next() {
                 << "Content-Type: application/x-thrift" "\r\n"
                 << "Host: " << host << ":" << port << "\r\n"
                 << "Accept: application/x-thrift" "\r\n"
-                << "User-Agent: " USER_AGENT "\r\n"
-                << "X-Line-Application: " APPLICATION_NAME "\r\n";
+                << "User-Agent: " LINE_USER_AGENT "\r\n"
+                << "X-Line-Application: " LINE_APPLICATION "\r\n";
 
             if (auth_token != "")
                 data << "X-Line-Access: " << auth_token << "\r\n";
@@ -152,8 +150,8 @@ void LineHttpTransport::send_next() {
         data
             << "Connection: Keep-Alive" "\r\n"
             << "Host: " << host << ":" << port << "\r\n"
-            << "User-Agent: " USER_AGENT "\r\n"
-            << "X-Line-Application: " APPLICATION_NAME "\r\n";
+            << "User-Agent: " LINE_USER_AGENT "\r\n"
+            << "X-Line-Application: " LINE_APPLICATION "\r\n";
 
         if (auth_token != "")
             data << "X-Line-Access: " << auth_token << "\r\n";

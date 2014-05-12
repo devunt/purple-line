@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include <conversation.h>
 #include <request.h>
 #include <notify.h>
@@ -9,13 +7,10 @@
 #include "purpleline.hpp"
 #include "wrapper.hpp"
 
-PINVerifier::PINVerifier(PurpleLine &parent)
-    : parent(parent)
+PINVerifier::PINVerifier(PurpleLine &parent) :
+    parent(parent),
+    http(parent.acct)
 {
-}
-
-PINVerifier::~PINVerifier() {
-    http.reset();
 }
 
 void PINVerifier::verify(
@@ -54,23 +49,19 @@ void PINVerifier::verify(
         WRAPPER(PINVerifier::timeout_cb),
         (gpointer)this);
 
-    http = boost::make_shared<LineHttpTransport>(
-        parent.acct, parent.conn,
-        "gd2.line.naver.jp", 443,
-        false);
-    http->set_auth_token(verifier);
-
-    http->request("GET", "/Q", [this, verifier, success]() {
-        if (http->status_code() != 200) {
+    http.set_auth_token(verifier);
+    http.request_auth(LINE_VERIFICATION_URL,
+        [this, verifier, success](int status, const guchar *data, gsize len)
+    {
+        if (!data || status != 200) {
             std::stringstream ss;
-            ss << "Account verification failed: invalid status code: " << http->status_code();
+            ss << "Account verification failed. Status: " << status;
 
             error(ss.str());
             return;
         }
 
-        std::string json((size_t)http->content_length(), '\0');
-        http->read((uint8_t *)&json[0], json.size());
+        std::string json((const char *)data, len);
 
         // Don't feel like invoking an entire JSON parser for this, this should be good enough.
         if (json.find("\"QRCODE_VERIFIED\"") == std::string::npos) {
@@ -113,8 +104,6 @@ void PINVerifier::cancel_cb(int) {
 }
 
 void PINVerifier::end() {
-    http.reset();
-
     if (timeout) {
         purple_timeout_remove(timeout);
         timeout = 0;

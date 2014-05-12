@@ -97,20 +97,22 @@ PurpleBuddy *PurpleLine::blist_update_buddy(line::Contact &contact, bool tempora
 
     // Update buddy icon if necessary
     if (contact.picturePath != "") {
-        std::string pic_path = contact.picturePath + "/preview";
+        std::string pic_path = contact.picturePath.substr(1) + "/preview";
         const char *current_pic_path = purple_buddy_icons_get_checksum_for_user(buddy);
         if (!current_pic_path || std::string(current_pic_path) != pic_path) {
             std::string uid = contact.mid;
 
-            http_os->request("GET", pic_path, [this, uid, pic_path]{
-                uint8_t *buffer = (uint8_t *)malloc(http_os->content_length() * sizeof(uint8_t));
-                http_os->read(buffer, http_os->content_length());
+            http.request_auth(LINE_OS_URL + pic_path,
+                [this, uid, pic_path](int status, const guchar *data, gsize len)
+            {
+                if (status != 200 || !data)
+                    return;
 
                 purple_buddy_icons_set_for_user(
                     acct,
                     uid.c_str(),
-                    (void *)buffer,
-                    (size_t)http_os->content_length(),
+                    g_memdup(data, len),
+                    len,
                     pic_path.c_str());
             });
         }

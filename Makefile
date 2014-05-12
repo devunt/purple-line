@@ -7,7 +7,7 @@ LIBS = `pkg-config --libs purple thrift`
 MAIN = libline.so
 
 GEN_SRCS = thrift_line/line_constants.cpp thrift_line/line_types.cpp thrift_line/TalkService.cpp
-REAL_SRCS = pluginmain.cpp linehttptransport.cpp thriftclient.cpp \
+REAL_SRCS = pluginmain.cpp linehttptransport.cpp thriftclient.cpp httpclient.cpp \
 	purpleline.cpp purpleline_blist.cpp \
 	poller.cpp pinverifier.cpp
 SRCS += $(GEN_SRCS)

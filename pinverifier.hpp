@@ -20,7 +20,7 @@ class PINVerifier {
 
     PurpleLine &parent;
 
-    boost::shared_ptr<LineHttpTransport> http;
+    HTTPClient http;
 
     void *notification;
     guint timeout;
@@ -28,7 +28,6 @@ class PINVerifier {
 public:
 
     PINVerifier(PurpleLine &parent);
-    ~PINVerifier();
 
     void verify(
         line::LoginResult loginResult,

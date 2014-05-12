@@ -5,6 +5,8 @@
 #include <connection.h>
 #include <sslconn.h>
 
+#include <boost/shared_ptr.hpp>
+
 // Template magic to wrap instance methods as C function pointers
 
 template<typename Sig, Sig F>

@@ -3,12 +3,13 @@
 
 #include <thrift/protocol/TCompactProtocol.h>
 
+#include "constants.hpp"
 #include "thriftclient.hpp"
 
 ThriftClient::ThriftClient(PurpleAccount *acct, PurpleConnection *conn, std::string path)
     : line::TalkServiceClient(
         boost::make_shared<apache::thrift::protocol::TCompactProtocol>(
-            boost::make_shared<LineHttpTransport>(acct, conn, "gd2.line.naver.jp", 443, true))),
+            boost::make_shared<LineHttpTransport>(acct, conn, LINE_THRIFT_SERVER, 443, true))),
     path(path)
 {
     http = boost::static_pointer_cast<LineHttpTransport>(getInputProtocol()->getTransport());
