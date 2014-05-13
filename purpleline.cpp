@@ -502,7 +502,6 @@ void PurpleLine::handle_group_invite(
     }
 }
 
-// TODO: Refactor this, it's about to become a mess
 void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
     std::string text;
     int flags = 0;
@@ -513,7 +512,18 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
         return;
     }
 
+    // Hack
+    if (msg.from == msg.to)
+        push_recent_message(msg.id);
+
+    PurpleConversation *conv = purple_find_conversation_with_account(
+        (msg.toType == line::MIDType::USER ? PURPLE_CONV_TYPE_IM : PURPLE_CONV_TYPE_CHAT),
+        msg.to.c_str(),
+        acct);
+
     // Replaying messages from history
+    // Unfortunately Pidgin displays messages with this flag with odd formatting and no username.
+    // Disable for now.
     //if (replay)
     //    flags |= PURPLE_MESSAGE_NO_LOG;
 
@@ -536,27 +546,15 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
         flags |= PURPLE_MESSAGE_SEND;
 
-        if (msg.toType == line::MIDType::USER) {
-            PurpleConversation *conv = purple_find_conversation_with_account(
-                PURPLE_CONV_TYPE_IM,
-                msg.to.c_str(),
-                acct);
-
-            if (conv) {
+        if (conv) {
+            if (msg.toType == line::MIDType::USER) {
                 purple_conv_im_write(
                     PURPLE_CONV_IM(conv),
                     msg.from.c_str(),
                     text.c_str(),
                     (PurpleMessageFlags)flags,
                     mtime);
-            }
-        } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
-            PurpleConversation *conv = purple_find_conversation_with_account(
-                PURPLE_CONV_TYPE_CHAT,
-                msg.to.c_str(),
-                acct);
-
-            if (conv) {
+            } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
                 purple_conv_chat_write(
                     PURPLE_CONV_CHAT(conv),
                     msg.from.c_str(),
@@ -571,11 +569,6 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
         flags |= PURPLE_MESSAGE_RECV;
 
         if (msg.toType == line::MIDType::USER) {
-            if (msg.to != profile.mid) {
-                purple_debug_warning("line", "Got message meant for some other user...?");
-                return;
-            }
-
             serv_got_im(
                 conn,
                 msg.from.c_str(),
@@ -583,27 +576,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                 (PurpleMessageFlags)flags,
                 mtime);
         } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
-            PurpleConversation *conv = purple_find_conversation_with_account(
-                PURPLE_CONV_TYPE_CHAT,
-                msg.to.c_str(),
-                acct);
-
-            if (!conv)
-                return; // Chat isn't open TODO perhaps notify
-
-            //if (replay) {
-            //    PurpleConversation *conv = purple_find_chat(conn, chat_id_to_purple_id[msg.to]);
-
-            //    if (!conv)
-            //        return; // Chat isn't open
-
-            //    purple_conv_chat_write(
-            //        PURPLE_CONV_CHAT(conv),
-            //        msg.from.c_str(),
-            //        text.c_str(),
-            //        (PurpleMessageFlags)flags,
-            //        mtime);
-            //} else {
+            if (conv) {
                 serv_got_chat_in(
                     conn,
                     purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)),
@@ -611,13 +584,9 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                     (PurpleMessageFlags)flags,
                     text.c_str(),
                     mtime);
-            //}
+            }
         }
     }
-
-    // Hack
-    if (msg.from == msg.to)
-        push_recent_message(msg.id);
 }
 
 std::string PurpleLine::get_room_display_name(line::Room &room) {
