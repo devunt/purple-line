@@ -3,13 +3,14 @@
 
 #include <time.h>
 
+#include <connection.h>
 #include <conversation.h>
-#include <request.h>
-#include <notify.h>
 #include <debug.h>
+#include <eventloop.h>
+#include <notify.h>
+#include <request.h>
 #include <sslconn.h>
 #include <util.h>
-#include <eventloop.h>
 
 #include "purpleline.hpp"
 #include "wrapper.hpp"
@@ -51,6 +52,50 @@ ChatType PurpleLine::get_chat_type(const char *type_ptr) {
         return ChatType::GROUP_INVITE;
 
     return ChatType::ANY; // Invalid
+}
+
+std::string PurpleLine::get_sticker_id(line::Message &msg) {
+    std::map<std::string, std::string> &meta = msg.contentMetadata;
+
+    if (meta.count("STKID") == 0 || meta.count("STKVER") == 0 || meta.count("STKPKGID") == 0)
+        return "";
+
+    std::stringstream id;
+
+    id << "(LINE sticker "
+        << meta["STKVER"] << "/"
+        << meta["STKPKGID"] << "/"
+        << meta["STKID"];
+
+    if (meta.count("STKTXT") == 1)
+        id << " " << meta["STKTXT"];
+
+    id << ")";
+
+    return id.str();
+}
+
+std::string PurpleLine::get_sticker_url(line::Message &msg, bool thumb) {
+    std::map<std::string, std::string> &meta = msg.contentMetadata;
+
+    int ver;
+    std::stringstream ss(meta["STKVER"]);
+    ss >> ver;
+
+    std::stringstream url;
+
+    url << LINE_STICKER_URL
+        << (ver / 1000000) << "/" << (ver / 1000) << "/" << (ver % 1000) << "/"
+        << meta["STKPKGID"] << "/"
+        << "PC/stickers/"
+        << meta["STKID"];
+
+    if (thumb)
+        url << "_key";
+
+    url << ".png";
+
+    return url.str();
 }
 
 PurpleLine::PurpleLine(PurpleConnection *conn, PurpleAccount *acct) :
@@ -521,6 +566,10 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
         (!sent && msg.toType == line::MIDType::USER) ? msg.from.c_str() : msg.to.c_str(),
         acct);
 
+    // If this is a new received IM, create the conversation if it doesn't exist
+    if (!conv && !sent && msg.toType == line::MIDType::USER)
+        conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, acct, msg.from.c_str());
+
     // Replaying messages from history
     // Unfortunately Pidgin displays messages with this flag with odd formatting and no username.
     // Disable for now.
@@ -530,6 +579,36 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
     switch (msg.contentType) {
         case line::ContentType::NONE: // actually text
             text = markup_escape(msg.text);
+            break;
+
+        case line::ContentType::STICKER:
+            {
+                std::string id = get_sticker_id(msg);
+
+                if (id == "")  {
+                    text = "<em>[Broken sticker]</em>";
+                } else {
+                    text = id;
+
+                    if (conv
+                        && purple_conv_custom_smiley_add(conv, id.c_str(), "id", id.c_str(), TRUE))
+                    {
+                        http.request(get_sticker_url(msg),
+                            [this, id, conv](int status, const guchar *data, gsize len)
+                            {
+                                if (status == 200 && data && len > 0) {
+                                    purple_conv_custom_smiley_write(
+                                        conv,
+                                        id.c_str(),
+                                        data,
+                                        len);
+                                }
+
+                                purple_conv_custom_smiley_close(conv, id.c_str());
+                            });
+                    }
+                }
+            }
             break;
 
         // TODO: other content types

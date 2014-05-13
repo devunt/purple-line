@@ -101,6 +101,8 @@ public:
 private:
 
     static ChatType get_chat_type(const char *type_ptr);
+    static std::string get_sticker_id(line::Message &msg);
+    static std::string get_sticker_url(line::Message &msg, bool thumb = false);
 
     void connect_signals();
     void disconnect_signals();
