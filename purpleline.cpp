@@ -518,7 +518,7 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
     PurpleConversation *conv = purple_find_conversation_with_account(
         (msg.toType == line::MIDType::USER ? PURPLE_CONV_TYPE_IM : PURPLE_CONV_TYPE_CHAT),
-        msg.to.c_str(),
+        (!sent && msg.toType == line::MIDType::USER) ? msg.from.c_str() : msg.to.c_str(),
         acct);
 
     // Replaying messages from history
