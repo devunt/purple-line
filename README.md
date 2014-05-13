@@ -49,6 +49,9 @@ Implemented
  * Removing friends
  * Leaving chats
  * Leaving groups
+* Message types
+ * Text (send/receive)
+ * Sticker (receive)
 
 To do
 -----
@@ -65,15 +68,17 @@ To do
   * Updating groups
   * Inviting people to groups
 * Changing your account icon
-* Other message types
-  * Images: Thumbnail should be easy
-  * Stickers: Figure out how to fetch, display as image. Send via commands?
-  * Locations: Display as link
-  * Audio/Video: Possibly difficult, low priority
+* Message types
+  * Image (send/receive)
+  * Sticker (send) Send via commands/plugin?
+  * Locations (send/receive) Display as link?
+  * Audio/Video (send/receive) Receiving should be doable. File transfer API for sending?
+  * Figure out what the other 15 message types mean...
 * Emoji (is it possible to tap into the smiley system for sending too?)
 * Companion Pidgin plugin
   * "Show more history" button
   * Enlarge images
+  * Sticker list
   * Maybe even play audio and video messages
 * Sending/receiving "message read" notifications
 * Check builds on more platforms
