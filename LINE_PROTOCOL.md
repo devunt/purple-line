@@ -1,1 +1,1 @@
-Protocol documentation moved to https://github.com/mvirkkunen/line-protocol/
+Protocol documentation moved to http://altrepo.eu/

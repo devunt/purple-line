@@ -23,6 +23,8 @@ Make sure you have the required prerequisites:
 * line_main.thrift - not included, must be placed in the project root directory. For the time being,
   you can acquire this file from the documentation at http://altrepo.eu/
 
+Then simply run:
+
     make
     make install
 
