@@ -11,8 +11,6 @@
 #include <prpl.h>
 
 #include "thrift_line/TalkService.h"
-#include "thrift_line/line_types.h"
-#include "thrift_line/line_constants.h"
 
 #include "linehttptransport.hpp"
 

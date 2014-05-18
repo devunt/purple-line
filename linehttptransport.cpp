@@ -5,7 +5,7 @@
 
 #include <thrift/transport/TTransportException.h>
 
-#include "thrift_line/line_types.h"
+#include "thrift_line/TalkService.h"
 
 #include "constants.hpp"
 #include "linehttptransport.hpp"
