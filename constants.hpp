@@ -1,5 +1,7 @@
 #pragma once
 
+#define LINE_PRPL_ID "prpl-mvirkkunen-line"
+
 #define LINE_THRIFT_SERVER "gd2.line.naver.jp"
 #define LINE_OS_URL "https://os.line.naver.jp/"
 #define LINE_STICKER_URL "http://dl.stickershop.line.naver.jp/products/"

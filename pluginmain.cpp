@@ -32,7 +32,7 @@ static void init_info(PurplePluginInfo &i) {
     i.type = PURPLE_PLUGIN_PROTOCOL;
     i.priority = PURPLE_PRIORITY_DEFAULT;
 
-    i.id = (char *)"prpl-mvirkkunen-line";
+    i.id = (char *)LINE_PRPL_ID;
     i.name = (char *)"LINE";
     i.version = (char *)"0.1";
     i.summary = (char *)"Plugin for Naver LINE";
