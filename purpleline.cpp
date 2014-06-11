@@ -3,6 +3,7 @@
 
 #include <time.h>
 
+#include <cmds.h>
 #include <connection.h>
 #include <conversation.h>
 #include <debug.h>
@@ -925,9 +926,18 @@ line::Contact &PurpleLine::get_up_to_date_contact(line::Contact &c) {
 int PurpleLine::send_message(std::string to, std::string text) {
     line::Message msg;
 
+    msg.contentType = line::ContentType::NONE;
     msg.from = profile.mid;
     msg.to = to;
     msg.text = text;
+
+    send_message(msg);
+
+    return 1;
+}
+
+void PurpleLine::send_message(line::Message &msg) {
+    std::string to(msg.to);
 
     c_out->send_sendMessage(0, msg);
     c_out->send([this, to]() {
@@ -961,8 +971,6 @@ int PurpleLine::send_message(std::string to, std::string text) {
         if (to[0] == 'u')
             push_recent_message(msg_back.id);
     });
-
-    return 1;
 }
 
 int PurpleLine::send_im(const char *who, const char *message, PurpleMessageFlags flags) {
@@ -1058,6 +1066,45 @@ void PurpleLine::push_recent_message(std::string id) {
     recent_messages.push_back(id);
     if (recent_messages.size() > 50)
         recent_messages.pop_front();
+}
+
+static const char *sticker_fields[] = { "STKVER", "STKPKGID", "STKID" };
+
+PurpleCmdRet PurpleLine::cmd_sticker(PurpleConversation *conv,
+    const gchar *cmd, gchar **args, gchar **error, void *data)
+{
+    (void)cmd;
+    (void)data;
+
+    line::Message msg;
+
+    std::stringstream ss(args[0]);
+    std::string item;
+
+    int part = 0;
+    while (std::getline(ss, item, '/')) {
+        if (part == 3) {
+            *error = g_strdup("Invalid sticker.");
+            return PURPLE_CMD_RET_FAILED;
+        }
+
+        msg.contentMetadata[sticker_fields[part]] = item;
+
+        part++;
+    }
+
+    if (part != 3) {
+        *error = g_strdup("Invalid sticker.");
+        return PURPLE_CMD_RET_FAILED;
+    }
+
+    msg.contentType = line::ContentType::STICKER;
+    msg.from = profile.mid;
+    msg.to = purple_conversation_get_name(conv);
+
+    send_message(msg);
+
+    return PURPLE_CMD_RET_OK;
 }
 
 void PurpleLine::notify_error(std::string msg) {

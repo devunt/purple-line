@@ -3,6 +3,7 @@
 #include <string>
 #include <deque>
 
+#include <cmds.h>
 #include <debug.h>
 #include <plugin.h>
 #include <prpl.h>
@@ -98,6 +99,9 @@ public:
 
     void signal_blist_node_removed(PurpleBlistNode *node);
 
+    PurpleCmdRet cmd_sticker(PurpleConversation *conv,
+        const gchar *cmd, gchar **args, gchar **error, void *data);
+
 private:
 
     static ChatType get_chat_type(const char *type_ptr);
@@ -162,6 +166,7 @@ private:
     line::Contact &get_up_to_date_contact(line::Contact &c);
 
     int send_message(std::string to, std::string text);
+    void send_message(line::Message &msg);
     void push_recent_message(std::string id);
 
     void notify_error(std::string msg);

@@ -3,7 +3,10 @@
 #include <glib.h>
 #include <account.h>
 #include <connection.h>
+#include <conversation.h>
 #include <sslconn.h>
+
+#include <cmds.h>
 
 #include <boost/shared_ptr.hpp>
 
@@ -21,8 +24,13 @@ struct wrapper_<Ret(Class::*)(Args...), Func> {
 
     Ret static f(PurpleAccount *acct, Args... args)
     {
-        return (((Class *)purple_connection_get_protocol_data(purple_account_get_connection(acct)))
-            ->*Func)(args...);
+        return f(purple_account_get_connection(acct), args...);
+    }
+
+    Ret static f(PurpleConversation *conv, const gchar *cmd,
+        gchar **args, gchar **error, void *data)
+    {
+        return f(purple_conversation_get_account(conv), conv, cmd, args, error, data);
     }
 
     Ret static f(gpointer context, Args... args) {

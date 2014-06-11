@@ -60,7 +60,9 @@ Implemented
  * Leaving groups
 * Message types
  * Text (send/receive)
- * Sticker (receive)
+ * Sticker (send via command/receive)
+ * Image (receive preview)
+ * Audio (receive preview)
 
 To do
 -----
@@ -78,17 +80,17 @@ To do
   * Inviting people to groups
 * Changing your account icon
 * Message types
-  * Image (send/receive)
-  * Sticker (send) Send via commands/plugin?
+  * Image (send)
   * Locations (send/receive) Display as link?
-  * Audio/Video (send/receive) Receiving should be doable. File transfer API for sending?
+  * Audio/Video (send) File transfer API for sending?
   * Figure out what the other 15 message types mean...
 * Emoji (is it possible to tap into the smiley system for sending too?)
 * Companion Pidgin plugin
   * "Show more history" button
-  * Enlarge images
   * Sticker list
-  * Maybe even play audio and video messages
+  * Open image messages
+  * Open audio messages
+  * Open video messages
 * Sending/receiving "message read" notifications
 * Check builds on more platforms
 * Packaging
