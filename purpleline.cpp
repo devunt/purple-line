@@ -1017,41 +1017,45 @@ PurpleChat *PurpleLine::find_blist_chat(const char *name) {
 }
 
 void PurpleLine::signal_blist_node_removed(PurpleBlistNode *node) {
-    if (PURPLE_BLIST_NODE_IS_CHAT(node)) {
-        GHashTable *components = purple_chat_get_components(PURPLE_CHAT(node));
+    if (!(PURPLE_BLIST_NODE_IS_CHAT(node)
+        && purple_chat_get_account(PURPLE_CHAT(node)) == acct))
+    {
+        return;
+    }
 
-        char *id_ptr = (char *)g_hash_table_lookup(components, "id");
-        if (!id_ptr) {
-            purple_debug_warning("line", "Tried to remove a chat with no id.");
-            return;
-        }
+    GHashTable *components = purple_chat_get_components(PURPLE_CHAT(node));
 
-        std::string id(id_ptr);
+    char *id_ptr = (char *)g_hash_table_lookup(components, "id");
+    if (!id_ptr) {
+        purple_debug_warning("line", "Tried to remove a chat with no id.");
+        return;
+    }
 
-        ChatType type = get_chat_type((char *)g_hash_table_lookup(components, "type"));
+    std::string id(id_ptr);
 
-        if (type == ChatType::ROOM) {
-            c_out->send_leaveRoom(0, id);
-            c_out->send([this]{
-                try {
-                    c_out->recv_leaveRoom();
-                } catch (line::TalkException &err) {
-                    notify_error(std::string("Couldn't leave from chat: ") + err.reason);
-                }
-            });
-        } else if (type == ChatType::GROUP) {
-            c_out->send_leaveGroup(0, id);
-            c_out->send([this]{
-                try {
-                    c_out->recv_leaveGroup();
-                } catch (line::TalkException &err) {
-                    notify_error(std::string("Couldn't leave from group: ") + err.reason);
-                }
-            });
-        } else {
-            purple_debug_warning("line", "Tried to remove a chat with no type.");
-            return;
-        }
+    ChatType type = get_chat_type((char *)g_hash_table_lookup(components, "type"));
+
+    if (type == ChatType::ROOM) {
+        c_out->send_leaveRoom(0, id);
+        c_out->send([this]{
+            try {
+                c_out->recv_leaveRoom();
+            } catch (line::TalkException &err) {
+                notify_error(std::string("Couldn't leave from chat: ") + err.reason);
+            }
+        });
+    } else if (type == ChatType::GROUP) {
+        c_out->send_leaveGroup(0, id);
+        c_out->send([this]{
+            try {
+                c_out->recv_leaveGroup();
+            } catch (line::TalkException &err) {
+                notify_error(std::string("Couldn't leave from group: ") + err.reason);
+            }
+        });
+    } else {
+        purple_debug_warning("line", "Tried to remove a chat with no type.");
+        return;
     }
 }
 
