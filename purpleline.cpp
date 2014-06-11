@@ -638,6 +638,30 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
             }
             break;
 
+        case line::ContentType::AUDIO:
+            {
+                text = "[Audio message";
+
+                if (msg.contentMetadata.count("AUDLEN")) {
+                    int len = 0;
+
+                    try {
+                        len = std::stoi(msg.contentMetadata["AUDLEN"]);
+                    } catch(...) { /* ignore */ }
+
+                    if (len > 0) {
+                        text += " "
+                            + std::to_string(len / 1000)
+                            + "."
+                            + std::to_string((len % 1000) / 100)
+                            + "s";
+                    }
+                }
+
+                text += "]";
+            }
+            break;
+
         // TODO: other content types
 
         default:
