@@ -44,6 +44,7 @@ Implemented
 * Send and receive messages in IM, groups and chats
 * Fetch recent messages
   * For groups and chats
+  * For IMs
 * Synchronize buddy list on the fly
   * Adding friends
   * Blocking friends
@@ -67,8 +68,7 @@ Implemented
 To do
 -----
 
-* Fetch recent messages
-  * For IMs
+* Only fetch unseen messages, let a log plugin handle already seen messages
 * Synchronize buddy list on the fly
   * Sync group/chat users more gracefully, show people joining/leaving
 * Editing buddy list

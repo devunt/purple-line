@@ -98,6 +98,7 @@ public:
     PurpleChat *find_blist_chat(const char *name);
 
     void signal_blist_node_removed(PurpleBlistNode *node);
+    void signal_conversation_created(PurpleConversation *conv);
 
     PurpleCmdRet cmd_sticker(PurpleConversation *conv,
         const gchar *cmd, gchar **args, gchar **error, void *data);

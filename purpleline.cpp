@@ -211,6 +211,13 @@ void PurpleLine::connect_signals() {
         (void *)this,
         PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_blist_node_removed, signal)),
         (void *)this);
+
+    purple_signal_connect(
+        purple_conversations_get_handle(),
+        "conversation-created",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_conversation_created, signal)),
+        (void *)this);
 }
 
 void PurpleLine::disconnect_signals() {
@@ -219,6 +226,12 @@ void PurpleLine::disconnect_signals() {
         "blist-node-removed",
         (void *)this,
         PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_blist_node_removed, signal)));
+
+    purple_signal_disconnect(
+        purple_conversations_get_handle(),
+        "conversation-created",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_conversation_created, signal)));
 }
 
 GList *PurpleLine::chat_info() {
@@ -864,11 +877,9 @@ void PurpleLine::join_chat(GHashTable *components) {
 void PurpleLine::join_chat_success(ChatType type, std::string id) {
     // Assume chat is on buddy list for now.
 
-    int purple_id = next_purple_id++;
-
     PurpleConversation *conv = serv_got_joined_chat(
         conn,
-        purple_id,
+        next_purple_id++,
         id.c_str());
 
     if (type == ChatType::GROUP) {
@@ -880,24 +891,6 @@ void PurpleLine::join_chat_success(ChatType type, std::string id) {
 
         set_chat_participants(PURPLE_CONV_CHAT(conv), room);
     }
-
-    c_out->send_getRecentMessages(id, 20);
-    c_out->send([this, purple_id]() {
-        std::vector<line::Message> recent_msgs;
-        c_out->recv_getRecentMessages(recent_msgs);
-
-        PurpleConversation *conv = purple_find_chat(conn, purple_id);
-        if (!conv)
-            return; // Chat went away already?
-
-        for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
-            line::Message &msg = *i;
-
-            handle_message(msg, (msg.from == profile.mid), true);
-
-            //push_recent_message(msg.id);
-        }
-    });
 }
 
 void PurpleLine::reject_chat(GHashTable *components) {
@@ -1060,6 +1053,30 @@ void PurpleLine::signal_blist_node_removed(PurpleBlistNode *node) {
             return;
         }
     }
+}
+
+void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
+    if (purple_conversation_get_account(conv) != acct)
+        return;
+
+    PurpleConversationType type = conv->type;
+    std::string name(purple_conversation_get_name(conv));
+
+    c_out->send_getRecentMessages(name, 20);
+    c_out->send([this, type, name]() {
+        std::vector<line::Message> recent_msgs;
+        c_out->recv_getRecentMessages(recent_msgs);
+
+        PurpleConversation *conv = purple_find_conversation_with_account(type, name.c_str(), acct);
+        if (!conv)
+            return; // Conversation died while fetching messages
+
+        for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
+            line::Message &msg = *i;
+
+            handle_message(msg, (msg.from == profile.mid), true);
+        }
+    });
 }
 
 void PurpleLine::push_recent_message(std::string id) {
