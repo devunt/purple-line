@@ -635,6 +635,11 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                                         id.c_str(),
                                         data,
                                         len);
+                                } else {
+                                    purple_debug_warning(
+                                        "line",
+                                        "Couldn't download sticker. Status: %d",
+                                        status);
                                 }
 
                                 purple_conv_custom_smiley_close(conv, id.c_str());
@@ -648,25 +653,45 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
             {
                 std::string id = "[LINE image " + msg.id + "]";
 
+                text = id;
+
+                if (!conv
+                    || !purple_conv_custom_smiley_add(conv, id.c_str(), "id", id.c_str(), TRUE))
+                {
+                    break;
+                }
+
                 if (msg.contentPreview.size() > 0) {
-                    text = id;
+                    purple_conv_custom_smiley_write(
+                        conv,
+                        id.c_str(),
+                        (const guchar *)msg.contentPreview.c_str(),
+                        msg.contentPreview.size());
 
-                    // Let's abuse the custom smiley system for image thumbnails for now; it will
-                    // be useful for images with no embedded preview.
-
-                    if (conv
-                        && purple_conv_custom_smiley_add(conv, id.c_str(), "id", id.c_str(), TRUE))
-                    {
-                        purple_conv_custom_smiley_write(
-                            conv,
-                            id.c_str(),
-                            (const guchar *)msg.contentPreview.c_str(),
-                            msg.contentPreview.size());
-
-                        purple_conv_custom_smiley_close(conv, id.c_str());
-                    }
+                    purple_conv_custom_smiley_close(conv, id.c_str());
                 } else {
-                    text = "<strong>[Image message, no preview]</strong>";
+                    std::string preview_url = msg.contentMetadata.count("PREVIEW_URL")
+                        ? msg.contentMetadata["PREVIEW_URL"]
+                        : std::string(LINE_OS_URL) + "os/m/" + msg.id + "/preview";
+
+                    http.request_auth(preview_url,
+                        [this, id, conv](int status, const guchar *data, gsize len)
+                        {
+                            if (status == 200 && data && len > 0) {
+                                purple_conv_custom_smiley_write(
+                                    conv,
+                                    id.c_str(),
+                                    data,
+                                    len);
+                            } else {
+                                purple_debug_warning(
+                                    "line",
+                                    "Couldn't download image message. Status: %d",
+                                    status);
+                            }
+
+                            purple_conv_custom_smiley_close(conv, id.c_str());
+                        });
                 }
             }
             break;
