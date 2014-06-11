@@ -5,6 +5,13 @@ purple-line
 
 libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.me/) by Naver / LINE Corporation.
 
+Where are the binaries and packages?
+------------------------------------
+
+I am not looking into "easy to install" options before I'm satisfied with the stability. I'd rather
+not have people who cannot figure out how to compile software by themselves be disappointed by an
+unstable plugin.
+
 Does it work?
 -------------
 
@@ -19,7 +26,8 @@ How to install
 Make sure you have the required prerequisites:
 
 * libpurple - probably available via package manager
-* Apache Thrift compiler and C++ library
+* Apache Thrift compiler and C++ library - v0.9.1 should be stable. The Git version and OS packages
+  are sometimes a bit iffy. Compiling by hand is your best bet.
 * line_main.thrift - not included, must be placed in the project root directory. For the time being,
   you can acquire this file from the documentation at http://altrepo.eu/
 
@@ -30,8 +38,6 @@ Then simply run:
 
 This will build and install the plugin into your home directory. Builds are only tested on Arch
 Linux and a recent Ubuntu for now.
-
-Easy to install packages will not be available until I get all the main features implemented.
 
 Implemented
 -----------
