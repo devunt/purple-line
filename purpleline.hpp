@@ -165,7 +165,6 @@ private:
     void push_recent_message(std::string id);
 
     void notify_error(std::string msg);
-
 };
 
 template <typename T>

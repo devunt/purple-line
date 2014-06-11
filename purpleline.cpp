@@ -62,7 +62,7 @@ std::string PurpleLine::get_sticker_id(line::Message &msg) {
 
     std::stringstream id;
 
-    id << "(LINE sticker "
+    id << "[LINE sticker "
         << meta["STKVER"] << "/"
         << meta["STKPKGID"] << "/"
         << meta["STKID"];
@@ -70,7 +70,7 @@ std::string PurpleLine::get_sticker_id(line::Message &msg) {
     if (meta.count("STKTXT") == 1)
         id << " " << meta["STKTXT"];
 
-    id << ")";
+    id << "]";
 
     return id.str();
 }
@@ -607,6 +607,33 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                                 purple_conv_custom_smiley_close(conv, id.c_str());
                             });
                     }
+                }
+            }
+            break;
+
+        case line::ContentType::IMAGE:
+            {
+                std::string id = "[LINE image " + msg.id + "]";
+
+                if (msg.contentPreview.size() > 0) {
+                    text = id;
+
+                    // Let's abuse the custom smiley system for image thumbnails for now; it will
+                    // be useful for images with no embedded preview.
+
+                    if (conv
+                        && purple_conv_custom_smiley_add(conv, id.c_str(), "id", id.c_str(), TRUE))
+                    {
+                        purple_conv_custom_smiley_write(
+                            conv,
+                            id.c_str(),
+                            (const guchar *)msg.contentPreview.c_str(),
+                            msg.contentPreview.size());
+
+                        purple_conv_custom_smiley_close(conv, id.c_str());
+                    }
+                } else {
+                    text = "<strong>[Image message, no preview]</strong>";
                 }
             }
             break;
