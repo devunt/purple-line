@@ -34,6 +34,10 @@ static std::string markup_unescape(std::string const &markup) {
     return result;
 }
 
+static std::string url_encode(std::string const &str) {
+    return purple_url_encode(str.c_str());
+}
+
 std::map<ChatType, std::string> PurpleLine::chat_type_to_string {
     { ChatType::GROUP, "group" },
     { ChatType::ROOM, "room" },
@@ -592,7 +596,22 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
     switch (msg.contentType) {
         case line::ContentType::NONE: // actually text
-            text = markup_escape(msg.text);
+        case line::ContentType::LOCATION:
+            if (msg.__isset.location) {
+                line::Location &loc = msg.location;
+
+                text = markup_escape(loc.title)
+                    + " | <a href=\"https://maps.google.com/?q=" + url_encode(loc.address)
+                    + "&ll=" + std::to_string(loc.latitude)
+                    + "," + std::to_string(loc.longitude)
+                    + "\">"
+                    + (loc.address.size()
+                        ? markup_escape(loc.address)
+                        : "(no address)")
+                    + "</a>";
+            } else {
+                text = markup_escape(msg.text);
+            }
             break;
 
         case line::ContentType::STICKER:

@@ -64,6 +64,7 @@ Implemented
  * Sticker (send via command/receive)
  * Image (receive preview)
  * Audio (receive preview)
+ * Location (receive)
 
 To do
 -----
@@ -81,7 +82,6 @@ To do
 * Changing your account icon
 * Message types
   * Image (send)
-  * Locations (send/receive) Display as link?
   * Audio/Video (send) File transfer API for sending?
   * Figure out what the other 15 message types mean...
 * Emoji (is it possible to tap into the smiley system for sending too?)
