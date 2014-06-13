@@ -609,7 +609,7 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
 
     // If this is a new conversation, we're not replaying history and history hasn't been fetched
     // yet, queue the message instead of showing it.
-    if (!replay) {
+    if (conv && !replay) {
         auto *queue = (std::vector<line::Message> *)
             purple_conversation_get_data(conv, "line-message-queue");
 
