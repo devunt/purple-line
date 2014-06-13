@@ -1338,7 +1338,7 @@ PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
     (void)cmd;
     (void)data;
 
-    int count;
+    int count = 10;
 
     if (args[0]) {
         try {
