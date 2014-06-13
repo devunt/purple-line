@@ -1325,6 +1325,8 @@ PurpleCmdRet PurpleLine::cmd_sticker(PurpleConversation *conv,
     msg.from = profile.mid;
     msg.to = purple_conversation_get_name(conv);
 
+    handle_message(msg, false);
+
     send_message(msg);
 
     return PURPLE_CMD_RET_OK;
