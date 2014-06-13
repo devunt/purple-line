@@ -99,6 +99,7 @@ public:
 
     void signal_blist_node_removed(PurpleBlistNode *node);
     void signal_conversation_created(PurpleConversation *conv);
+    void signal_deleting_conversation(PurpleConversation *conv);
 
     PurpleCmdRet cmd_sticker(PurpleConversation *conv,
         const gchar *cmd, gchar **args, gchar **error, void *data);
@@ -133,7 +134,9 @@ private:
 
     void join_chat_success(ChatType type, std::string id);
 
-    void handle_message(line::Message &msg, bool sent, bool replay);
+    void handle_message(line::Message &msg, bool replay);
+    void write_message(PurpleConversation *conv, line::Message &msg,
+        time_t mtime, int flags, std::string text);
     void handle_group_invite(line::Group &group, line::Contact &invitee, line::Contact &inviter);
 
     template <typename T>

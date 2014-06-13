@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <functional>
 
@@ -222,6 +223,13 @@ void PurpleLine::connect_signals() {
         (void *)this,
         PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_conversation_created, signal)),
         (void *)this);
+
+    purple_signal_connect(
+        purple_conversations_get_handle(),
+        "deleting-conversation",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_deleting_conversation, signal)),
+        (void *)this);
 }
 
 void PurpleLine::disconnect_signals() {
@@ -236,6 +244,13 @@ void PurpleLine::disconnect_signals() {
         "conversation-created",
         (void *)this,
         PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_conversation_created, signal)));
+
+
+    purple_signal_disconnect(
+        purple_conversations_get_handle(),
+        "deleting-conversation",
+        (void *)this,
+        PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_deleting_conversation, signal)));
 }
 
 GList *PurpleLine::chat_info() {
@@ -565,12 +580,16 @@ void PurpleLine::handle_group_invite(
     }
 }
 
-void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
+void PurpleLine::handle_message(line::Message &msg, bool replay) {
     std::string text;
     int flags = 0;
     time_t mtime = (time_t)(msg.createdTime / 1000);
 
-    if (std::find(recent_messages.cbegin(), recent_messages.cend(), msg.id) != recent_messages.cend()) {
+    bool sent = (msg.from == profile.mid);
+
+    if (std::find(recent_messages.cbegin(), recent_messages.cend(), msg.id)
+        != recent_messages.cend())
+    {
         // We already processed this message. User is probably talking with himself.
         return;
     }
@@ -581,12 +600,24 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
 
     PurpleConversation *conv = purple_find_conversation_with_account(
         (msg.toType == line::MIDType::USER ? PURPLE_CONV_TYPE_IM : PURPLE_CONV_TYPE_CHAT),
-        (!sent && msg.toType == line::MIDType::USER) ? msg.from.c_str() : msg.to.c_str(),
+        ((!sent && msg.toType == line::MIDType::USER) ? msg.from.c_str() : msg.to.c_str()),
         acct);
 
     // If this is a new received IM, create the conversation if it doesn't exist
     if (!conv && !sent && msg.toType == line::MIDType::USER)
         conv = purple_conversation_new(PURPLE_CONV_TYPE_IM, acct, msg.from.c_str());
+
+    // If this is a new conversation, we're not replaying history and history hasn't been fetched
+    // yet, queue the message instead of showing it.
+    if (!replay) {
+        auto *queue = (std::vector<line::Message> *)
+            purple_conversation_get_data(conv, "line-message-queue");
+
+        if (queue) {
+            queue->push_back(msg);
+            return;
+        }
+    }
 
     // Replaying messages from history
     // Unfortunately Pidgin displays messages with this flag with odd formatting and no username.
@@ -732,39 +763,25 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
     if (sent) {
         // Messages sent by user (sync from other devices)
 
-        flags |= PURPLE_MESSAGE_SEND;
-
-        if (conv) {
-            if (msg.toType == line::MIDType::USER) {
-                purple_conv_im_write(
-                    PURPLE_CONV_IM(conv),
-                    msg.from.c_str(),
-                    text.c_str(),
-                    (PurpleMessageFlags)flags,
-                    mtime);
-            } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
-                purple_conv_chat_write(
-                    PURPLE_CONV_CHAT(conv),
-                    msg.from.c_str(),
-                    text.c_str(),
-                    (PurpleMessageFlags)flags,
-                    mtime);
-            }
-        }
+        write_message(conv, msg, mtime, flags | PURPLE_MESSAGE_SEND, text);
     } else {
         // Messages received from other users
 
         flags |= PURPLE_MESSAGE_RECV;
 
-        if (msg.toType == line::MIDType::USER) {
-            serv_got_im(
-                conn,
-                msg.from.c_str(),
-                text.c_str(),
-                (PurpleMessageFlags)flags,
-                mtime);
-        } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
-            if (conv) {
+        if (replay) {
+            // Write replayed messages instead of serv_got_* to avoid Pidgin's IM sound
+
+            write_message(conv, msg, mtime, flags, text);
+        } else {
+            if (msg.toType == line::MIDType::USER) {
+                serv_got_im(
+                    conn,
+                    msg.from.c_str(),
+                    text.c_str(),
+                    (PurpleMessageFlags)flags,
+                    mtime);
+            } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
                 serv_got_chat_in(
                     conn,
                     purple_conv_chat_get_id(PURPLE_CONV_CHAT(conv)),
@@ -774,6 +791,29 @@ void PurpleLine::handle_message(line::Message &msg, bool sent, bool replay) {
                     mtime);
             }
         }
+    }
+}
+
+void PurpleLine::write_message(PurpleConversation *conv, line::Message &msg,
+    time_t mtime, int flags, std::string text)
+{
+    if (!conv)
+        return;
+
+    if (msg.toType == line::MIDType::USER) {
+        purple_conv_im_write(
+            PURPLE_CONV_IM(conv),
+            msg.from.c_str(),
+            text.c_str(),
+            (PurpleMessageFlags)flags,
+            mtime);
+    } else if (msg.toType == line::MIDType::GROUP || msg.toType == line::MIDType::ROOM) {
+        purple_conv_chat_write(
+            PURPLE_CONV_CHAT(conv),
+            msg.from.c_str(),
+            text.c_str(),
+            (PurpleMessageFlags)flags,
+            mtime);
     }
 }
 
@@ -1107,10 +1147,13 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
     if (purple_conversation_get_account(conv) != acct)
         return;
 
+    // Start queuing messages while the history is fetched
+    purple_conversation_set_data(conv, "line-message-queue", new std::vector<line::Message>());
+
     PurpleConversationType type = conv->type;
     std::string name(purple_conversation_get_name(conv));
 
-    c_out->send_getRecentMessages(name, 20);
+    c_out->send_getRecentMessages(name, 10);
     c_out->send([this, type, name]() {
         std::vector<line::Message> recent_msgs;
         c_out->recv_getRecentMessages(recent_msgs);
@@ -1119,12 +1162,61 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
         if (!conv)
             return; // Conversation died while fetching messages
 
+        auto *queue = (std::vector<line::Message> *)
+            purple_conversation_get_data(conv, "line-message-queue");
+
+        purple_conversation_set_data(conv, "line-message-queue", nullptr);
+
+        purple_conversation_write(
+            conv,
+            "",
+            "<strong>Message history</strong>",
+            (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
+            time(NULL));
+
         for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
             line::Message &msg = *i;
 
-            handle_message(msg, (msg.from == profile.mid), true);
+            // Skip any just-received messages that are in the queue
+            if (queue) {
+                auto r = find_if(queue->begin(), queue->end(),
+                    [&msg](line::Message &m) { return msg.id == m.id; });
+
+                if (r != queue->end())
+                    continue;
+            }
+
+            handle_message(msg, true);
+        }
+
+        purple_conversation_write(
+            conv,
+            "",
+            "<hr>",
+            (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
+            time(NULL));
+
+        // If there's a message queue, play it back now
+        if (queue) {
+            for (line::Message &msg: *queue)
+                handle_message(msg, false);
+
+            delete queue;
         }
     });
+}
+
+void PurpleLine::signal_deleting_conversation(PurpleConversation *conv) {
+    if (purple_conversation_get_account(conv) != acct)
+        return;
+
+    auto *queue = (std::vector<line::Message> *)
+        purple_conversation_get_data(conv, "line-message-queue");
+
+    if (queue) {
+        purple_conversation_set_data(conv, "line-message-queue", nullptr);
+        delete queue;
+    }
 }
 
 void PurpleLine::push_recent_message(std::string id) {

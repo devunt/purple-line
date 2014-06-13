@@ -109,11 +109,11 @@ void Poller::fetch_operations() {
                     parent.blist_update_chat(op.param1, ChatType::ROOM);
 
                 case line::OpType::SEND_MESSAGE: // 25
-                    parent.handle_message(op.message, true, false);
+                    parent.handle_message(op.message, false);
                     break;
 
                 case line::OpType::RECEIVE_MESSAGE: // 26
-                    parent.handle_message(op.message, false, false);
+                    parent.handle_message(op.message, false);
                     break;
 
                 case line::OpType::CANCEL_INVITATION_GROUP: // 31
