@@ -80,6 +80,7 @@ public:
     PurpleLine(PurpleConnection *conn, PurpleAccount *acct);
     ~PurpleLine();
 
+    static void register_commands();
     static const char *list_icon(PurpleAccount *, PurpleBuddy *buddy);
     static GList *status_types(PurpleAccount *);
     static char *get_chat_name(GHashTable *components);
@@ -97,11 +98,10 @@ public:
     int chat_send(int id, const char *message, PurpleMessageFlags flags);
     PurpleChat *find_blist_chat(const char *name);
 
-    void signal_blist_node_removed(PurpleBlistNode *node);
-    void signal_conversation_created(PurpleConversation *conv);
-    void signal_deleting_conversation(PurpleConversation *conv);
-
     PurpleCmdRet cmd_sticker(PurpleConversation *conv,
+        const gchar *cmd, gchar **args, gchar **error, void *data);
+
+    PurpleCmdRet cmd_history(PurpleConversation *conv,
         const gchar *cmd, gchar **args, gchar **error, void *data);
 
 private:
@@ -172,6 +172,12 @@ private:
     int send_message(std::string to, std::string text);
     void send_message(line::Message &msg);
     void push_recent_message(std::string id);
+
+    void signal_blist_node_removed(PurpleBlistNode *node);
+    void signal_conversation_created(PurpleConversation *conv);
+    void signal_deleting_conversation(PurpleConversation *conv);
+
+    void fetch_conversation_history(PurpleConversation *conv, int count);
 
     void notify_error(std::string msg);
 };

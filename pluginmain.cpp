@@ -1,7 +1,6 @@
 #include <glib.h>
 
 #include <account.h>
-#include <cmds.h>
 #include <debug.h>
 #include <prpl.h>
 #include <version.h>
@@ -76,15 +75,7 @@ static void line_plugin_init(PurplePlugin *plugin) {
     init_info(info);
     init_prpl_info(prpl_info);
 
-    purple_cmd_register(
-        "sticker",
-        "w",
-        PURPLE_CMD_P_PRPL,
-        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT),
-        LINE_PRPL_ID,
-        WRAPPER(PurpleLine::cmd_sticker),
-        "Sends a sticker. The argument should be of the format VER/PKGID/ID.",
-        nullptr);
+    PurpleLine::register_commands();
 }
 
 extern "C" {

@@ -119,6 +119,29 @@ PurpleLine::~PurpleLine() {
     c_out->close();
 }
 
+void PurpleLine::register_commands() {
+    purple_cmd_register(
+        "sticker",
+        "w",
+        PURPLE_CMD_P_PRPL,
+        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT),
+        LINE_PRPL_ID,
+        WRAPPER(PurpleLine::cmd_sticker),
+        "Sends a sticker. The argument should be of the format VER/PKGID/ID.",
+        nullptr);
+
+    purple_cmd_register(
+        "history",
+        "w",
+        PURPLE_CMD_P_PRPL,
+        (PurpleCmdFlag)
+            (PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_ALLOW_WRONG_ARGS),
+        LINE_PRPL_ID,
+        WRAPPER(PurpleLine::cmd_history),
+        "Shows more chat history. Optional argument specifies number of messages to show.",
+        nullptr);
+}
+
 const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
     return "line";
 }
@@ -651,6 +674,8 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
 
                 if (id == "")  {
                     text = "<em>[Broken sticker]</em>";
+
+                    purple_debug_warning("line", "Got a broken sticker.\n");
                 } else {
                     text = id;
 
@@ -669,7 +694,7 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
                                 } else {
                                     purple_debug_warning(
                                         "line",
-                                        "Couldn't download sticker. Status: %d",
+                                        "Couldn't download sticker. Status: %d\n",
                                         status);
                                 }
 
@@ -1150,13 +1175,33 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
     // Start queuing messages while the history is fetched
     purple_conversation_set_data(conv, "line-message-queue", new std::vector<line::Message>());
 
+    fetch_conversation_history(conv, 10);
+}
+
+void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count) {
     PurpleConversationType type = conv->type;
     std::string name(purple_conversation_get_name(conv));
 
-    c_out->send_getRecentMessages(name, 10);
-    c_out->send([this, type, name]() {
+    int64_t end_seq = -1;
+
+    int64_t *end_seq_p = (int64_t *)purple_conversation_get_data(conv, "line-end-seq");
+    if (end_seq_p)
+        end_seq = *end_seq_p;
+
+    if (end_seq != -1)
+        c_out->send_getPreviousMessages(name, end_seq - 1, count);
+    else
+        c_out->send_getRecentMessages(name, count);
+
+    c_out->send([this, type, name, end_seq]() {
+        int64_t new_end_seq = end_seq;
+
         std::vector<line::Message> recent_msgs;
-        c_out->recv_getRecentMessages(recent_msgs);
+
+        if (end_seq != -1)
+            c_out->recv_getPreviousMessages(recent_msgs);
+        else
+            c_out->recv_getRecentMessages(recent_msgs);
 
         PurpleConversation *conv = purple_find_conversation_with_account(type, name.c_str(), acct);
         if (!conv)
@@ -1176,6 +1221,15 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
 
         for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
             line::Message &msg = *i;
+
+            if (msg.contentMetadata.count("seq")) {
+                try {
+                    int64_t seq = std::stoll(msg.contentMetadata["seq"]);
+
+                    if (new_end_seq == -1 || seq < new_end_seq)
+                        new_end_seq = seq;
+                } catch (...) { /* ignore parse error */ }
+            }
 
             // Skip any just-received messages that are in the queue
             if (queue) {
@@ -1203,6 +1257,12 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
 
             delete queue;
         }
+
+        int64_t *end_seq_p = (int64_t *)purple_conversation_get_data(conv, "line-end-seq");
+        if (end_seq_p)
+            delete end_seq_p;
+
+        purple_conversation_set_data(conv, "line-end-seq", new int64_t(new_end_seq));
     });
 }
 
@@ -1216,6 +1276,12 @@ void PurpleLine::signal_deleting_conversation(PurpleConversation *conv) {
     if (queue) {
         purple_conversation_set_data(conv, "line-message-queue", nullptr);
         delete queue;
+    }
+
+    int64_t *end_seq_p = (int64_t *)purple_conversation_get_data(conv, "line-end-seq");
+    if (end_seq_p) {
+        purple_conversation_set_data(conv, "line-end-seq", nullptr);
+        delete end_seq_p;
     }
 }
 
@@ -1260,6 +1326,28 @@ PurpleCmdRet PurpleLine::cmd_sticker(PurpleConversation *conv,
     msg.to = purple_conversation_get_name(conv);
 
     send_message(msg);
+
+    return PURPLE_CMD_RET_OK;
+}
+
+PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
+    const gchar *cmd, gchar **args, gchar **error, void *data)
+{
+    (void)cmd;
+    (void)data;
+
+    int count;
+
+    if (args[0]) {
+        try {
+            count = std::stoi(args[0]);
+        } catch (...) {
+            *error = g_strdup("Invalid message count.");
+            return PURPLE_CMD_RET_FAILED;
+        }
+    }
+
+    fetch_conversation_history(conv, count);
 
     return PURPLE_CMD_RET_OK;
 }
