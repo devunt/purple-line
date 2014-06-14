@@ -177,7 +177,7 @@ private:
     void signal_conversation_created(PurpleConversation *conv);
     void signal_deleting_conversation(PurpleConversation *conv);
 
-    void fetch_conversation_history(PurpleConversation *conv, int count);
+    void fetch_conversation_history(PurpleConversation *conv, int count, bool requested);
 
     void notify_error(std::string msg);
 };

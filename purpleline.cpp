@@ -1175,10 +1175,10 @@ void PurpleLine::signal_conversation_created(PurpleConversation *conv) {
     // Start queuing messages while the history is fetched
     purple_conversation_set_data(conv, "line-message-queue", new std::vector<line::Message>());
 
-    fetch_conversation_history(conv, 10);
+    fetch_conversation_history(conv, 10, false);
 }
 
-void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count) {
+void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count, bool requested) {
     PurpleConversationType type = conv->type;
     std::string name(purple_conversation_get_name(conv));
 
@@ -1193,7 +1193,7 @@ void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count)
     else
         c_out->send_getRecentMessages(name, count);
 
-    c_out->send([this, type, name, end_seq]() {
+    c_out->send([this, requested, type, name, end_seq]() {
         int64_t new_end_seq = end_seq;
 
         std::vector<line::Message> recent_msgs;
@@ -1212,16 +1212,8 @@ void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count)
 
         purple_conversation_set_data(conv, "line-message-queue", nullptr);
 
-        purple_conversation_write(
-            conv,
-            "",
-            "<strong>Message history</strong>",
-            (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
-            time(NULL));
-
-        for (auto i = recent_msgs.rbegin(); i != recent_msgs.rend(); i++) {
-            line::Message &msg = *i;
-
+        // Find least seq value from messages for future history queries
+        for (line::Message &msg: recent_msgs) {
             if (msg.contentMetadata.count("seq")) {
                 try {
                     int64_t seq = std::stoll(msg.contentMetadata["seq"]);
@@ -1230,25 +1222,56 @@ void PurpleLine::fetch_conversation_history(PurpleConversation *conv, int count)
                         new_end_seq = seq;
                 } catch (...) { /* ignore parse error */ }
             }
-
-            // Skip any just-received messages that are in the queue
-            if (queue) {
-                auto r = find_if(queue->begin(), queue->end(),
-                    [&msg](line::Message &m) { return msg.id == m.id; });
-
-                if (r != queue->end())
-                    continue;
-            }
-
-            handle_message(msg, true);
         }
 
-        purple_conversation_write(
-            conv,
-            "",
-            "<hr>",
-            (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
-            time(NULL));
+        if (queue) {
+            // If there's a message queue, remove any already-queued messages in the recent message
+            // list to prevent them showing up twice.
+
+            recent_msgs.erase(
+                std::remove_if(
+                    recent_msgs.begin(),
+                    recent_msgs.end(),
+                    [&queue](line::Message &rm) {
+                        auto r = find_if(
+                            queue->begin(),
+                            queue->end(),
+                            [&rm](line::Message &qm) { return qm.id == rm.id; });
+
+                        return (r != queue->end());
+                    }),
+                recent_msgs.end());
+        }
+
+        if (recent_msgs.size()) {
+            purple_conversation_write(
+                conv,
+                "",
+                "<strong>Message history</strong>",
+                (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
+                time(NULL));
+
+            for (auto msgi = recent_msgs.rbegin(); msgi != recent_msgs.rend(); msgi++)
+                handle_message(*msgi, true);
+
+            purple_conversation_write(
+                conv,
+                "",
+                "<hr>",
+                (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
+                time(NULL));
+        } else {
+            if (requested) {
+                // If history was requested by the user and there is none, let the user know
+
+                purple_conversation_write(
+                    conv,
+                    "",
+                    "<strong>No more history</strong>",
+                    (PurpleMessageFlags)PURPLE_MESSAGE_RAW,
+                    time(NULL));
+            }
+        }
 
         // If there's a message queue, play it back now
         if (queue) {
@@ -1349,7 +1372,7 @@ PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
         }
     }
 
-    fetch_conversation_history(conv, count);
+    fetch_conversation_history(conv, count, true);
 
     return PURPLE_CMD_RET_OK;
 }
