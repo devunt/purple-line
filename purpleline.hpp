@@ -109,25 +109,6 @@ private:
     void connect_signals();
     void disconnect_signals();
 
-    // Login process methods, executed in this this order
-    void start_login();
-
-    //void pin_verification(line::LoginResult result); // optional
-    //int pin_verification_timeout();
-    //void pin_verification_cancel(int);
-    //void pin_verification_end();
-    //void pin_verification_error(std::string error);
-
-    void got_auth_token(std::string auth_token);
-    void get_last_op_revision();
-    void get_profile();
-    void get_contacts();
-    void get_groups();
-    void get_rooms();
-    void update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list);
-    void get_group_invites();
-    void sync_done();
-
     void handle_message(line::Message &msg, bool replay);
     void write_message(PurpleConversation *conv, line::Message &msg,
         time_t mtime, int flags, std::string text);
@@ -149,6 +130,24 @@ private:
     void fetch_conversation_history(PurpleConversation *conv, int count, bool requested);
 
     void notify_error(std::string msg);
+
+    // sync
+
+private:
+
+    // Login process methods, executed in this this order
+    void login_start();
+
+    void got_auth_token(std::string auth_token);
+    void get_last_op_revision();
+    void get_profile();
+    void get_contacts();
+    void get_groups();
+    void get_rooms();
+    void update_rooms(line::TMessageBoxWrapUpResponse wrap_up_list);
+    void get_group_invites();
+
+    void login_done();
 
     // blist
 
