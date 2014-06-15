@@ -83,20 +83,13 @@ public:
     static void register_commands();
     static const char *list_icon(PurpleAccount *, PurpleBuddy *buddy);
     static GList *status_types(PurpleAccount *);
-    static char *get_chat_name(GHashTable *components);
     static char *status_text(PurpleBuddy *buddy);
     static void tooltip_text(PurpleBuddy *buddy, PurpleNotifyUserInfo *user_info, gboolean full);
     static void login(PurpleAccount *acct);
 
     void close();
-    GList *chat_info();
     int send_im(const char *who, const char *message, PurpleMessageFlags flags);
     void remove_buddy(PurpleBuddy *buddy, PurpleGroup *);
-    void join_chat(GHashTable *components);
-    void reject_chat(GHashTable *components);
-    void chat_leave(int id);
-    int chat_send(int id, const char *message, PurpleMessageFlags flags);
-    PurpleChat *find_blist_chat(const char *name);
 
     PurpleCmdRet cmd_sticker(PurpleConversation *conv,
         const gchar *cmd, gchar **args, gchar **error, void *data);
@@ -106,7 +99,10 @@ public:
 
 private:
 
-    static ChatType get_chat_type(const char *type_ptr);
+    static std::string markup_escape(std::string const &text);
+    static std::string markup_unescape(std::string const &markup);
+    static std::string url_encode(std::string const &str);
+
     static std::string get_sticker_id(line::Message &msg);
     static std::string get_sticker_url(line::Message &msg, bool thumb = false);
 
@@ -116,11 +112,11 @@ private:
     // Login process methods, executed in this this order
     void start_login();
 
-    void pin_verification(line::LoginResult result); // optional
-    int pin_verification_timeout();
-    void pin_verification_cancel(int);
-    void pin_verification_end();
-    void pin_verification_error(std::string error);
+    //void pin_verification(line::LoginResult result); // optional
+    //int pin_verification_timeout();
+    //void pin_verification_cancel(int);
+    //void pin_verification_end();
+    //void pin_verification_error(std::string error);
 
     void got_auth_token(std::string auth_token);
     void get_last_op_revision();
@@ -132,12 +128,31 @@ private:
     void get_group_invites();
     void sync_done();
 
-    void join_chat_success(ChatType type, std::string id);
-
     void handle_message(line::Message &msg, bool replay);
     void write_message(PurpleConversation *conv, line::Message &msg,
         time_t mtime, int flags, std::string text);
-    void handle_group_invite(line::Group &group, line::Contact &invitee, line::Contact &inviter);
+
+    std::string get_room_display_name(line::Room &room);
+    void set_chat_participants(PurpleConvChat *chat, line::Room &room);
+    void set_chat_participants(PurpleConvChat *chat, line::Group &group);
+
+    line::Contact &get_up_to_date_contact(line::Contact &c);
+
+    int send_message(std::string to, std::string text);
+    void send_message(line::Message &msg);
+    void push_recent_message(std::string id);
+
+    void signal_blist_node_removed(PurpleBlistNode *node);
+    void signal_conversation_created(PurpleConversation *conv);
+    void signal_deleting_conversation(PurpleConversation *conv);
+
+    void fetch_conversation_history(PurpleConversation *conv, int count, bool requested);
+
+    void notify_error(std::string msg);
+
+    // blist
+
+private:
 
     template <typename T>
     std::set<T *> blist_find(std::function<bool(T *)> predicate);
@@ -163,23 +178,25 @@ private:
     PurpleChat *blist_update_chat(line::Room &room);
     void blist_remove_chat(std::string id, ChatType type);
 
-    std::string get_room_display_name(line::Room &room);
-    void set_chat_participants(PurpleConvChat *chat, line::Room &room);
-    void set_chat_participants(PurpleConvChat *chat, line::Group &group);
+    // chats
 
-    line::Contact &get_up_to_date_contact(line::Contact &c);
+public:
+    static char *get_chat_name(GHashTable *components);
 
-    int send_message(std::string to, std::string text);
-    void send_message(line::Message &msg);
-    void push_recent_message(std::string id);
+    GList *chat_info();
+    void join_chat(GHashTable *components);
+    void reject_chat(GHashTable *components);
+    void chat_leave(int id);
+    int chat_send(int id, const char *message, PurpleMessageFlags flags);
+    PurpleChat *find_blist_chat(const char *name);
 
-    void signal_blist_node_removed(PurpleBlistNode *node);
-    void signal_conversation_created(PurpleConversation *conv);
-    void signal_deleting_conversation(PurpleConversation *conv);
+private:
 
-    void fetch_conversation_history(PurpleConversation *conv, int count, bool requested);
+    static ChatType get_chat_type(const char *type_ptr);
 
-    void notify_error(std::string msg);
+    void join_chat_success(ChatType type, std::string id);
+
+    void handle_group_invite(line::Group &group, line::Contact &invitee, line::Contact &inviter);
 };
 
 template <typename T>
