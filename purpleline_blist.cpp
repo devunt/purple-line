@@ -102,7 +102,7 @@ PurpleBuddy *PurpleLine::blist_update_buddy(line::Contact &contact, bool tempora
         if (!current_pic_path || std::string(current_pic_path) != pic_path) {
             std::string uid = contact.mid;
 
-            http.request_auth(LINE_OS_URL + pic_path,
+            http.request(LINE_OS_URL + pic_path, HTTPFlag::auth,
                 [this, uid, pic_path](int status, const guchar *data, gsize len)
             {
                 if (status != 200 || !data)

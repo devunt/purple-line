@@ -458,7 +458,7 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
                         ? msg.contentMetadata["PREVIEW_URL"]
                         : std::string(LINE_OS_URL) + "os/m/" + msg.id + "/preview";
 
-                    http.request_auth(preview_url,
+                    http.request(preview_url, HTTPFlag::auth | HTTPFlag::large,
                         [this, id, conv](int status, const guchar *data, gsize len)
                         {
                             if (status == 200 && data && len > 0) {
@@ -954,7 +954,7 @@ PurpleCmdRet PurpleLine::cmd_open(PurpleConversation *conv,
 
     std::string url = std::string(LINE_OS_URL) + "os/m/"+ att->id;
 
-    http.request_auth(url,
+    http.request(url, HTTPFlag::auth | HTTPFlag::large,
         [this, path, token,
             ctype=purple_conversation_get_type(conv),
             cname=std::string(purple_conversation_get_name(conv))]

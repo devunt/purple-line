@@ -50,7 +50,7 @@ void PINVerifier::verify(
         (gpointer)this);
 
     http.set_auth_token(verifier);
-    http.request_auth(LINE_VERIFICATION_URL,
+    http.request(LINE_VERIFICATION_URL, HTTPFlag::auth,
         [this, verifier, success](int status, const guchar *data, gsize len)
     {
         if (!data || status != 200) {

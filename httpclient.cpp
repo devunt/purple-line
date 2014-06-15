@@ -24,18 +24,14 @@ void HTTPClient::set_auth_token(std::string token) {
 }
 
 void HTTPClient::request(std::string url, HTTPClient::CompleteFunc callback) {
-    request_core(url, callback, false);
+    request(url, HTTPFlag::none, callback);
 }
 
-void HTTPClient::request_auth(std::string url, HTTPClient::CompleteFunc callback) {
-    request_core(url, callback, true);
-}
-
-void HTTPClient::request_core(std::string url, HTTPClient::CompleteFunc callback, bool auth) {
+void HTTPClient::request(std::string url, HTTPFlag flags, HTTPClient::CompleteFunc callback) {
     Request *req = new Request();
     req->client = this;
     req->url = url;
-    req->auth = auth;
+    req->flags = flags;
     req->callback = callback;
     req->handle = nullptr;
 
@@ -65,7 +61,7 @@ void HTTPClient::execute_next() {
         free(host);
         free(path);
 
-        if (req->auth) {
+        if (req->flags & HTTPFlag::auth) {
             ss
                 << "X-Line-Application: " << LINE_APPLICATION << "\r\n"
                 << "X-Line-Access: " << auth_token << "\r\n";
@@ -83,7 +79,7 @@ void HTTPClient::execute_next() {
             TRUE,
             ss.str().c_str(),
             TRUE,
-            -1,
+            (req->flags & HTTPFlag::large) ? (100 * 1024 * 1024) : -1,
             purple_cb,
             (gpointer)req);
     }

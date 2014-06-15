@@ -7,6 +7,20 @@
 #include <account.h>
 #include <util.h>
 
+enum class HTTPFlag {
+    none =  0,
+    auth =  1 << 0,
+    large = 1 << 1,
+};
+
+inline constexpr HTTPFlag operator|(HTTPFlag a, HTTPFlag b) {
+    return (HTTPFlag)((int)a | (int)b);
+};
+
+inline constexpr bool operator&(HTTPFlag a, HTTPFlag b) {
+    return ((int)a & (int)b) != 0;
+}
+
 class HTTPClient {
     const int MAX_IN_FLIGHT = 4;
 
@@ -15,7 +29,7 @@ class HTTPClient {
     struct Request {
         HTTPClient *client;
         std::string url;
-        bool auth;
+        HTTPFlag flags;
         CompleteFunc callback;
         PurpleUtilFetchUrlData *handle;
     };
@@ -26,8 +40,6 @@ class HTTPClient {
 
     std::list<Request *> request_queue;
     int in_flight;
-
-    void request_core(std::string url, CompleteFunc callback, bool auth);
 
     void execute_next();
     void parse_response(const char *res, int &status, const guchar *&body);
@@ -44,6 +56,6 @@ public:
     void set_auth_token(std::string token);
 
     void request(std::string url, CompleteFunc callback);
-    void request_auth(std::string url, CompleteFunc callback);
+    void request(std::string url, HTTPFlag flags, CompleteFunc callback);
 
 };
