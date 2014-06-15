@@ -4,6 +4,9 @@
 
 #include <time.h>
 
+#include <glib.h>
+#include <glib/gstdio.h>
+
 #include <cmds.h>
 #include <connection.h>
 #include <conversation.h>
@@ -119,6 +122,16 @@ void PurpleLine::register_commands() {
         WRAPPER(PurpleLine::cmd_history),
         "Shows more chat history. Optional argument specifies number of messages to show.",
         nullptr);
+
+    purple_cmd_register(
+        "open",
+        "w",
+        PURPLE_CMD_P_PRPL,
+        (PurpleCmdFlag)(PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT),
+        LINE_PRPL_ID,
+        WRAPPER(PurpleLine::cmd_open),
+        "Opens an attachment (image, audio) by number.",
+        nullptr);
 }
 
 const char *PurpleLine::list_icon(PurpleAccount *, PurpleBuddy *) {
@@ -156,6 +169,31 @@ GList *PurpleLine::status_types(PurpleAccount *) {
     types = g_list_append(types, t);
 
     return types;
+}
+
+std::string PurpleLine::get_tmp_dir(bool create) {
+    std::string name = "line-" + profile.mid;
+
+    for (char c: name) {
+        if (!(c == '-' || std::isalpha(c) || std::isdigit(c))) {
+            name = "line";
+            break;
+        }
+    }
+
+    gchar *dir_p = g_build_filename(
+        g_get_tmp_dir(),
+        name.c_str(),
+        nullptr);
+
+    if (create)
+        g_mkdir_with_parents(dir_p, 0700);
+
+    std::string dir(dir_p);
+
+    g_free(dir_p);
+
+    return dir;
 }
 
 char *PurpleLine::status_text(PurpleBuddy *buddy) {
@@ -204,6 +242,13 @@ void PurpleLine::login(PurpleAccount *acct) {
 void PurpleLine::close() {
     disconnect_signals();
 
+    if (temp_files.size()) {
+        for (std::string &path: temp_files)
+            g_unlink(path.c_str());
+
+        g_rmdir(get_tmp_dir().c_str());
+    }
+
     delete this;
 }
 
@@ -249,6 +294,35 @@ void PurpleLine::disconnect_signals() {
         "deleting-conversation",
         (void *)this,
         PURPLE_CALLBACK(WRAPPER_TYPE(PurpleLine::signal_deleting_conversation, signal)));
+}
+
+std::string PurpleLine::conv_attachment_add(PurpleConversation *conv,
+    line::ContentType::type type, std::string id)
+{
+    auto atts = (std::vector<Attachment> *)purple_conversation_get_data(conv, "line-attachments");
+    if (!atts) {
+        atts = new std::vector<Attachment>();
+        purple_conversation_set_data(conv, "line-attachments", atts);
+    }
+
+    atts->emplace_back(type, id);
+
+    return std::to_string(atts->size());
+}
+
+PurpleLine::Attachment *PurpleLine::conv_attachment_get(PurpleConversation *conv, std::string token)
+{
+    int index;
+
+    try {
+        index = std::stoi(token);
+    } catch (...) {
+        return nullptr;
+    }
+
+    auto atts = (std::vector<Attachment> *)purple_conversation_get_data(conv, "line-attachments");
+
+    return (atts && index <= (int)atts->size()) ? &(*atts)[index - 1] : nullptr;
 }
 
 void PurpleLine::handle_message(line::Message &msg, bool replay) {
@@ -359,6 +433,12 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
 
                 text = id;
 
+                if (conv) {
+                    text += " <font color=\"#888888\">/open "
+                        + conv_attachment_add(conv, msg.contentType, msg.id)
+                        + "</font>";
+                }
+
                 if (!conv
                     || !purple_conv_custom_smiley_add(conv, id.c_str(), "id", id.c_str(), TRUE))
                 {
@@ -421,6 +501,12 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
                 }
 
                 text += "]";
+
+                if (conv) {
+                    text += " <font color=\"#888888\">/open "
+                        + conv_attachment_add(conv, msg.contentType, msg.id)
+                        + "</font>";
+                }
             }
             break;
 
@@ -731,7 +817,7 @@ void PurpleLine::signal_deleting_conversation(PurpleConversation *conv) {
     if (purple_conversation_get_account(conv) != acct)
         return;
 
-    auto *queue = (std::vector<line::Message> *)
+    auto queue = (std::vector<line::Message> *)
         purple_conversation_get_data(conv, "line-message-queue");
 
     if (queue) {
@@ -744,6 +830,12 @@ void PurpleLine::signal_deleting_conversation(PurpleConversation *conv) {
         purple_conversation_set_data(conv, "line-end-seq", nullptr);
         delete end_seq_p;
     }
+
+    auto atts = (std::vector<Attachment> *)purple_conversation_get_data(conv, "line-attachments");
+    if (atts) {
+        purple_conversation_set_data(conv, "line-attachments", nullptr);
+        delete atts;
+    }
 }
 
 void PurpleLine::push_recent_message(std::string id) {
@@ -755,11 +847,8 @@ void PurpleLine::push_recent_message(std::string id) {
 static const char *sticker_fields[] = { "STKVER", "STKPKGID", "STKID" };
 
 PurpleCmdRet PurpleLine::cmd_sticker(PurpleConversation *conv,
-    const gchar *cmd, gchar **args, gchar **error, void *data)
+    const gchar *, gchar **args, gchar **error, void *)
 {
-    (void)cmd;
-    (void)data;
-
     line::Message msg;
 
     std::stringstream ss(args[0]);
@@ -794,11 +883,8 @@ PurpleCmdRet PurpleLine::cmd_sticker(PurpleConversation *conv,
 }
 
 PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
-    const gchar *cmd, gchar **args, gchar **error, void *data)
+    const gchar *, gchar **args, gchar **error, void *)
 {
-    (void)cmd;
-    (void)data;
-
     int count = 10;
 
     if (args[0]) {
@@ -811,6 +897,88 @@ PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
     }
 
     fetch_conversation_history(conv, count, true);
+
+    return PURPLE_CMD_RET_OK;
+}
+
+static std::map<line::ContentType::type, std::string> attachment_extensions = {
+    { line::ContentType::IMAGE, ".jpg" },
+    { line::ContentType::AUDIO, ".mp3" },
+};
+
+PurpleCmdRet PurpleLine::cmd_open(PurpleConversation *conv,
+    const gchar *, gchar **args, gchar **error, void *)
+{
+    std::string token(args[0]);
+
+    Attachment *att = conv_attachment_get(conv, token);
+    if (!att) {
+        *error = g_strdup("No such attachment.");
+        return PURPLE_CMD_RET_FAILED;
+    }
+
+    if (att->path != "" && g_file_test(att->path.c_str(), G_FILE_TEST_EXISTS)) {
+        purple_notify_uri(conn, att->path.c_str());
+        return PURPLE_CMD_RET_OK;
+    }
+
+    // Ensure there's nothing funny about the id as we're going to use it as a path element
+    try {
+        std::stoll(att->id);
+    } catch (...) {
+        *error = g_strdup("Failed to download attachment.");
+        return PURPLE_CMD_RET_FAILED;
+    }
+
+    std::string ext = ".jpg";
+    if (attachment_extensions.count(att->type))
+        ext = attachment_extensions[att->type];
+
+    std::string dir = get_tmp_dir(true);
+
+    gchar *path_p = g_build_filename(
+        dir.c_str(),
+        (att->id + ext).c_str(),
+        nullptr);
+
+    std::string path(path_p);
+
+    g_free(path_p);
+
+    purple_conversation_write(
+        conv,
+        "",
+        "Downloading attachment...",
+        (PurpleMessageFlags)PURPLE_MESSAGE_SYSTEM,
+        time(NULL));
+
+    std::string url = std::string(LINE_OS_URL) + "os/m/"+ att->id;
+
+    http.request_auth(url,
+        [this, path, token,
+            ctype=purple_conversation_get_type(conv),
+            cname=std::string(purple_conversation_get_name(conv))]
+        (int status, const guchar *data, gsize len)
+        {
+            if (status == 200 && data && len > 0) {
+                g_file_set_contents(path.c_str(), (const char *)data, len, nullptr);
+
+                temp_files.push_back(path);
+
+                PurpleConversation *conv = purple_find_conversation_with_account(
+                    ctype, cname.c_str(), acct);
+
+                if (conv) {
+                    Attachment *att = conv_attachment_get(conv, token);
+                    if (att)
+                        att->path = path;
+                }
+
+                purple_notify_uri(conn, path.c_str());
+            } else {
+                notify_error("Failed to download attachment.");
+            }
+        });
 
     return PURPLE_CMD_RET_OK;
 }

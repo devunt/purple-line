@@ -46,6 +46,17 @@ enum class ChatType {
 
 class PurpleLine {
 
+    struct Attachment {
+        line::ContentType::type type;
+        std::string id;
+        std::string path;
+
+        Attachment(line::ContentType::type type, std::string id)
+            : type(type), id(id)
+        {
+        }
+    };
+
     static std::map<ChatType, std::string> chat_type_to_string;
 
     PurpleConnection *conn;
@@ -64,6 +75,8 @@ class PurpleLine {
     int next_purple_id;
 
     std::deque<std::string> recent_messages;
+
+    std::vector<std::string> temp_files;
 
     line::Profile profile;
     line::Contact profile_contact; // contains some fields from profile
@@ -92,10 +105,13 @@ public:
     void remove_buddy(PurpleBuddy *buddy, PurpleGroup *);
 
     PurpleCmdRet cmd_sticker(PurpleConversation *conv,
-        const gchar *cmd, gchar **args, gchar **error, void *data);
+        const gchar *, gchar **args, gchar **error, void *);
 
     PurpleCmdRet cmd_history(PurpleConversation *conv,
-        const gchar *cmd, gchar **args, gchar **error, void *data);
+        const gchar *, gchar **args, gchar **error, void *);
+
+    PurpleCmdRet cmd_open(PurpleConversation *conv,
+        const gchar *, gchar **args, gchar **error, void *);
 
 private:
 
@@ -108,6 +124,12 @@ private:
 
     void connect_signals();
     void disconnect_signals();
+
+    std::string get_tmp_dir(bool create=false);
+
+    std::string conv_attachment_add(PurpleConversation *conv,
+        line::ContentType::type type, std::string id);
+    Attachment *conv_attachment_get(PurpleConversation *conv, std::string token);
 
     void handle_message(line::Message &msg, bool replay);
     void write_message(PurpleConversation *conv, line::Message &msg,
