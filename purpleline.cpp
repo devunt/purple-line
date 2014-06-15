@@ -428,8 +428,11 @@ void PurpleLine::handle_message(line::Message &msg, bool replay) {
             break;
 
         case line::ContentType::IMAGE:
+        case line::ContentType::VIDEO: // Videos could really benefit from streaming...
             {
-                std::string id = "[LINE image " + msg.id + "]";
+                std::string type_std = line::_ContentType_VALUES_TO_NAMES.at(msg.contentType);
+
+                std::string id = "[LINE " + type_std + " " + msg.id + "]";
 
                 text = id;
 
@@ -903,6 +906,7 @@ PurpleCmdRet PurpleLine::cmd_history(PurpleConversation *conv,
 
 static std::map<line::ContentType::type, std::string> attachment_extensions = {
     { line::ContentType::IMAGE, ".jpg" },
+    { line::ContentType::VIDEO, ".mp4" },
     { line::ContentType::AUDIO, ".mp3" },
 };
 
