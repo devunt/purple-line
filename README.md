@@ -1,16 +1,11 @@
+Original codes are here: http://altrepo.eu/git/purple-line.git/
 **Warning: Unfinished software!** This plugin is still under development and many things are still unstable or unimplemented.
 
 purple-line
 ===========
 
 libpurple (Pidgin, Finch) protocol plugin for LINE (http://line.me/) by Naver / LINE Corporation.
-
-Where are the binaries and packages?
-------------------------------------
-
-I am not looking into "easy to install" options before I'm satisfied with the stability. I'd rather
-not have people who cannot figure out how to compile software by themselves be disappointed by an
-unstable plugin.
+In current version, you should login with NAVER Account. (In-Korea regions)
 
 Does it work?
 -------------
@@ -36,13 +31,13 @@ Then simply run:
     make
     make install
 
-This will build and install the plugin into your home directory. Builds are only tested on Arch
-Linux and a recent Ubuntu for now.
+This will build and install the plugin into your home directory. Builds are only tested on
+recent Ubuntu for now.
 
 Implemented
 -----------
 
-* Logging in
+* Logging in with NAVER Account
   * Authentication
   * Fetching user profile
   * Account icon
@@ -75,6 +70,7 @@ Implemented
 To do
 -----
 
+* Both supporting NAVER account / EMail account
 * Only fetch unseen messages, let a log plugin handle already seen messages
 * Synchronize buddy list on the fly
   * Sync group/chat users more gracefully, show people joining/leaving
