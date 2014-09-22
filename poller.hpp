@@ -7,11 +7,8 @@
 #include <plugin.h>
 #include <prpl.h>
 
+#include "constants.hpp"
 #include "thriftclient.hpp"
-
-#define LINEPRPL_ID "prpl-mvirkkunen-line"
-
-#define LINE_ACCOUNT_CERTIFICATE "line-certificate"
 
 class PurpleLine;
 

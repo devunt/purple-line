@@ -6,6 +6,7 @@
 #define LINE_OS_URL "https://os.line.naver.jp/"
 #define LINE_STICKER_URL "http://dl.stickershop.line.naver.jp/products/"
 #define LINE_VERIFICATION_URL "https://gd2.line.naver.jp/Q"
+#define LINE_SESSION_URL "https://gd2k.line.naver.jp/authct/v1/keys/naver"
 
 #define LINE_LOGIN_PATH "/api/v4/TalkService.do"
 #define LINE_COMMAND_PATH "/S4"
@@ -14,3 +15,5 @@
 
 #define LINE_USER_AGENT "purple-line (LINE for libpurple/Pidgin)"
 #define LINE_APPLICATION "DESKTOPWIN\t3.2.1.83\tWINDOWS\t5.1.2600-XP-x64"
+
+#define LINE_ACCOUNT_CERTIFICATE "line-certificate"

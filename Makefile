@@ -1,8 +1,8 @@
 CXX = g++
 CXXFLAGS = -g -Wall -shared -fPIC \
 	-DHAVE_INTTYPES_H -DHAVE_CONFIG_H -DPURPLE_PLUGINS \
-	`pkg-config --cflags purple thrift`
-LIBS = `pkg-config --libs purple thrift`
+	`pkg-config --cflags purple thrift openssl`
+LIBS = `pkg-config --libs purple thrift openssl`
 
 MAIN = libline.so
 

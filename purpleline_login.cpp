@@ -1,4 +1,6 @@
 #include "purpleline.hpp"
+#include <openssl/rsa.h>
+#include <boost/tokenizer.hpp>
 
 
 void PurpleLine::login_start() {
@@ -6,22 +8,16 @@ void PurpleLine::login_start() {
     purple_connection_update_progress(conn, "Logging in", 0, 3);
 
     std::string certificate(purple_account_get_string(acct, LINE_ACCOUNT_CERTIFICATE, ""));
+    if (certificate != "") {
+        got_auth_token(certificate);
+        return;
+    }
 
-    c_out->send_loginWithIdentityCredentialForCertificate(
-        line::IdentityProvider::LINE,
-        purple_account_get_username(acct),
-        purple_account_get_password(acct),
-        true,
-        "127.0.0.1",
-        "purple-line (Pidgin)",
-        certificate);
-    c_out->send([this]() {
-        line::LoginResult result;
-
-        try {
-            c_out->recv_loginWithIdentityCredentialForCertificate(result);
-        } catch (line::TalkException &err) {
-            std::string msg = "Could not log in. " + err.reason;
+    http.request(LINE_SESSION_URL,
+        [this](int status, const guchar *data, gsize len)
+    {
+        if (status != 200 || !data) {
+            std::string msg = "Could not log in. Failed to get session key.";
 
             purple_connection_error(
                 conn,
@@ -30,33 +26,109 @@ void PurpleLine::login_start() {
             return;
         }
 
-        if (result.type == line::LoginResultType::SUCCESS && result.authToken != "")
-        {
-            got_auth_token(result.authToken);
-        }
-        else if (result.type == line::LoginResultType::REQUIRE_DEVICE_CONFIRM)
-        {
-            pin_verifier.verify(result, [this](std::string auth_token, std::string certificate) {
-                if (certificate != "") {
-                    purple_account_set_string(
-                        acct,
-                        LINE_ACCOUNT_CERTIFICATE,
-                        certificate.c_str());
-                }
+        std::string session_key, rsa_key;
+        std::string json((const char *)data, len);
+        std::string rsa_encrypted;
+        char rsa_encrypted_arr[512];
 
-                got_auth_token(auth_token);
-            });
+        std::size_t pos = json.find("{\"session_key\":\"") + 16;
+        std::size_t pos2 = json.find("\",\"rsa_key\":\"");
+        session_key = json.substr(pos, pos2 - pos);
+        rsa_key = json.substr(pos2 + 13, json.find("\"}") - pos2 - 13);
+
+        std::string username = purple_account_get_username(acct);
+        std::string password = purple_account_get_password(acct);
+
+        std::ostringstream ss;
+        ss
+            << (char)session_key.length() << session_key
+            << (char)username.length() << username
+            << (char)password.length() << password;
+        std::string str = ss.str();
+
+        int i = 0;
+        std::string rsa[3];
+        boost::char_separator<char> sep(",");
+        boost::tokenizer<boost::char_separator<char>> tokens(rsa_key, sep);
+        for (const auto& t : tokens) {
+            rsa[i++] = t;
         }
-        else
-        {
-            std::stringstream ss("Could not log in. Bad LoginResult type: ");
-            ss << result.type;
-            std::string msg = ss.str();
+
+        RSA* pubkey = RSA_new();
+
+        BN_hex2bn(&pubkey->n, rsa[1].c_str());
+        BN_hex2bn(&pubkey->e, rsa[2].c_str());
+
+        int rsalen = RSA_public_encrypt(str.length(), (const unsigned char*) str.c_str(), (unsigned char*) rsa_encrypted_arr, pubkey, RSA_PKCS1_PADDING);
+        if (rsalen <= 0) {
+            std::string msg = "Could not log in. Fail to encrypt string.";
 
             purple_connection_error(
                 conn,
                 msg.c_str());
+
+            return;
         }
+
+        const char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+        for (int i = 0; i < rsalen; ++i) {
+            const char ch = rsa_encrypted_arr[i];
+            rsa_encrypted.append(&hex[(ch & 0xF0) >> 4], 1);
+            rsa_encrypted.append(&hex[ch & 0x0F], 1);
+        }
+
+        c_out->send_loginWithIdentityCredentialForCertificate(
+            line::IdentityProvider::NAVER_KR,
+            username,
+            password,
+            rsa[0],
+            rsa_encrypted,
+            true,
+            "127.0.0.1",
+            "purple-line",
+            "");
+        c_out->send([this]() {
+            line::LoginResult result;
+
+            try {
+                c_out->recv_loginWithIdentityCredentialForCertificate(result);
+            } catch (line::TalkException &err) {
+                std::string msg = "Could not log in. " + err.reason;
+
+                purple_connection_error(
+                    conn,
+                    msg.c_str());
+
+                return;
+            }
+
+            if (result.type == line::LoginResultType::SUCCESS && result.authToken != "")
+            {
+                got_auth_token(result.authToken);
+            }
+            else if (result.type == line::LoginResultType::REQUIRE_DEVICE_CONFIRM)
+            {
+                pin_verifier.verify(result, [this](std::string auth_token, std::string certificate) {
+                    if (certificate != "") {
+                        purple_account_set_string(
+                            acct,
+                            LINE_ACCOUNT_CERTIFICATE,
+                            certificate.c_str());
+                        got_auth_token(certificate);
+                    }
+                });
+            }
+            else
+            {
+                std::stringstream ss("Could not log in. Bad LoginResult type: ");
+                ss << result.type;
+                std::string msg = ss.str();
+
+                purple_connection_error(
+                    conn,
+                    msg.c_str());
+            }
+        });
     });
 }
 
