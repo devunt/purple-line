@@ -243,7 +243,10 @@ void LineHttpTransport::ssl_input(PurpleSslConnection *, PurpleInputCondition co
                 msg += err.reason;
 
                 if (err.code == line::ErrorCode::NOT_AUTHORIZED_DEVICE) {
-                    if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
+                    if (err.reason == "DEVICE_LOSE" || err.reason == "EXPIRED") {
+                        purple_account_set_string(acct, LINE_ACCOUNT_CERTIFICATE, "");
+                        msg = "LINE: Your certificate had expired. Please re-enable the LINE account.";
+                    } else if (err.reason == "AUTHENTICATION_DIVESTED_BY_OTHER_DEVICE") {
                         msg = "LINE: You have been logged out because "
                             "you logged in from another device.";
                     } else if (err.reason == "REVOKE") {
